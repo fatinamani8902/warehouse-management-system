@@ -16,8 +16,8 @@ import lovRoutes from "./lovRoutes.js";
 const router = express.Router();
 
 router.use(authRoutes);
-router.use(masterDataRoutes);
-router.use(inboundRoutes);
+router.use("/master", masterDataRoutes);
+router.use("/inbound", inboundRoutes);
 router.use(putawayRoutes);
 router.use(outboundRoutes);
 router.use(inventoryRoutes);

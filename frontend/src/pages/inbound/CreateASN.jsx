@@ -44,7 +44,7 @@ export default function CreateASN({ session, onCreated, onCancel }) {
         lines_count: Number(linesCount),
         notes,
       });
-      onCreated(created);
+      onCreated(created.data);
     } catch (error) {
       setErrors((current) => ({
         ...current,

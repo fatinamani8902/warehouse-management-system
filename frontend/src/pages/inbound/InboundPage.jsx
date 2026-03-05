@@ -51,11 +51,11 @@ const grnActionLabels = {
 
 const asnStatusActions = {
   draft: ["submit", "cancel"],
-  pending: ["mark_in_transit", "cancel"],
-  in_transit: ["mark_arrived", "cancel"],
-  arrived: ["close", "cancel"],
-  closed: [],
-  cancelled: [],
+pending: ["mark_in_transit"],
+in_transit: ["mark_arrived"],
+arrived: ["close"],
+closed: [],
+cancelled: [],
 };
 
 const grnStatusActions = {
@@ -224,8 +224,17 @@ const InboundPage = () => {
         fetchAsns(requestSession, asnParams),
         fetchGrns(requestSession, grnParams),
       ]);
-      const asnItems = Array.isArray(asnRows) ? asnRows : Array.isArray(asnRows?.items) ? asnRows.items : [];
-      const grnItems = Array.isArray(grnRows) ? grnRows : Array.isArray(grnRows?.items) ? grnRows.items : [];
+      const asnItems = Array.isArray(asnRows?.data)
+  ? asnRows.data
+  : Array.isArray(asnRows)
+  ? asnRows
+  : [];
+
+const grnItems = Array.isArray(grnRows?.data)
+  ? grnRows.data
+  : Array.isArray(grnRows)
+  ? grnRows
+  : [];
       setAsns(asnItems);
       setGrns(grnItems);
     } catch (loadError) {
@@ -243,7 +252,8 @@ const InboundPage = () => {
     try {
       setSubmittingKey(`${record.asn_id}-${action}`);
       setError("");
-      const updated = await transitionAsn(session, record.asn_id, action);
+      const response = await transitionAsn(session, record.asn_id, action);
+const updated = response.data;
       setAsns((current) => current.map((row) => (row.asn_id === updated.asn_id ? updated : row)));
       setSelectedAsn((current) => (current?.asn_id === updated.asn_id ? updated : current));
 
@@ -281,51 +291,65 @@ const InboundPage = () => {
     }
   };
 
-  const performCancellation = async (reason) => {
-    if (!cancellationTarget) {
-      return;
+const performCancellation = async (reason) => {
+  if (!cancellationTarget) return;
+
+  const { entity, record } = cancellationTarget;
+  const documentId = entity === "asn" ? record.asn_id : record.grn_id;
+
+  try {
+    setCancelling(true);
+    setError("");
+
+    let response;
+
+    if (entity === "asn") {
+  response = await transitionAsn(session, documentId, "cancel", {
+    cancellation_reason: reason,
+  });
+
+  const updated = response.data;
+
+      setAsns((current) =>
+        current.map((row) =>
+          row.asn_id === updated.asn_id ? updated : row
+        )
+      );
+
+    } else {
+      response = await transitionGrn(session, documentId, "cancel", {
+  cancellation_reason: reason,
+});
+      const updated = response.data;
+
+      setGrns((current) =>
+        current.map((row) =>
+          row.grn_id === updated.grn_id ? updated : row
+        )
+      );
     }
 
-    const { entity, record } = cancellationTarget;
-    const documentId = entity === "asn" ? record.asn_id : record.grn_id;
+    toast({
+      title: "Cancellation complete",
+      description: `${entity.toUpperCase()} cancelled successfully`,
+    });
 
-    try {
-      setCancelling(true);
-      setError("");
+    setCancellationTarget(null);
 
-      const response = await cancelInboundDocument(session, {
-        document_id: documentId,
-        document_type: entity,
-        cancellation_reason: reason,
-      });
+  } catch (cancelError) {
+    const message = cancelError.message || "Unable to cancel document";
+    setError(message);
 
-      const updated = response?.document;
-      if (updated) {
-        if (entity === "asn") {
-          setAsns((current) => current.map((row) => (row.asn_id === updated.asn_id ? updated : row)));
-          setSelectedAsn((current) => (current?.asn_id === updated.asn_id ? updated : current));
-        } else {
-          setGrns((current) => current.map((row) => (row.grn_id === updated.grn_id ? updated : row)));
-          setSelectedGrn((current) => (current?.grn_id === updated.grn_id ? updated : current));
-        }
-      } else {
-        await loadInboundData();
-      }
+    toast({
+      title: "Cancellation failed",
+      description: message,
+      variant: "destructive",
+    });
 
-      toast({
-        title: "Cancellation complete",
-        description: response?.message || `${entity.toUpperCase()} cancelled successfully`,
-      });
-
-      setCancellationTarget(null);
-    } catch (cancelError) {
-      const message = cancelError.message || "Unable to cancel document";
-      setError(message);
-      toast({ title: "Cancellation failed", description: message, variant: "destructive" });
-    } finally {
-      setCancelling(false);
-    }
-  };
+  } finally {
+    setCancelling(false);
+  }
+};
 
   const handleAsnAction = (record, action) => {
     if (action === "cancel") {

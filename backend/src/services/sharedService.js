@@ -1,19 +1,16 @@
-import { generateMockId } from "../utils/idGenerator.js";
 import { buildPagination } from "../utils/pagination.js";
 import { nowIso } from "../utils/mock.js";
 
-function buildList(resource, prefix, tenantId, page, pageSize, extra = {}) {
-  const items = [
-    {
-      id: generateMockId(prefix),
-      tenantId,
-      resource,
-      status: "DRAFT",
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      ...extra,
-    },
-  ];
+/**
+ * In-memory store
+ */
+const memoryStore = {};
+
+/**
+ * LIST
+ */
+function buildList(resource, prefix, tenantId, page, pageSize) {
+  const items = memoryStore[resource] || [];
 
   return {
     items,
@@ -21,43 +18,84 @@ function buildList(resource, prefix, tenantId, page, pageSize, extra = {}) {
   };
 }
 
-function buildEntity(resource, prefix, id, tenantId, extra = {}) {
-  return {
-    id: id || generateMockId(prefix),
-    tenantId,
-    resource,
-    status: "DRAFT",
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
-    ...extra,
-  };
+/**
+ * GET
+ */
+function buildEntity(resource, prefix, id, tenantId) {
+  const items = memoryStore[resource] || [];
+  return items.find((item) => item.id === id) || null;
 }
 
+/**
+ * CREATE
+ */
 function buildCreate(resource, prefix, tenantId, payload = {}, extra = {}) {
-  return {
-    ...buildEntity(resource, prefix, generateMockId(prefix), tenantId, extra),
-    ...payload,
-    createdAt: nowIso(),
-  };
-}
+  if (!memoryStore[resource]) {
+    memoryStore[resource] = [];
+  }
 
-function buildUpdate(resource, prefix, id, tenantId, payload = {}, extra = {}) {
-  return {
-    ...buildEntity(resource, prefix, id, tenantId, extra),
-    ...payload,
-    updatedAt: nowIso(),
-  };
-}
+  // Auto increment ID
+  const nextNumber = memoryStore[resource].length + 1;
+  const id = `${prefix}${String(nextNumber).padStart(4, "0")}`;
 
-function buildDelete(resource, id, tenantId) {
-  return {
+  const idField = `${resource.slice(0, -1)}_id`;
+
+  const newItem = {
+    [idField]: id,
     id,
     tenantId,
     resource,
-    deleted: false,
-    deletionRecorded: true,
-    timestamp: nowIso(),
+    status: extra.status || "ACTIVE",
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    ...payload,
   };
+
+  memoryStore[resource].push(newItem);
+
+  return newItem;
 }
 
-export { buildList, buildEntity, buildCreate, buildUpdate, buildDelete };
+/**
+ * UPDATE
+ */
+function buildUpdate(resource, prefix, id, tenantId, payload = {}) {
+  const items = memoryStore[resource] || [];
+  const index = items.findIndex((item) => item.id === id);
+
+  if (index === -1) {
+    return null;
+  }
+
+  const updated = {
+    ...items[index],
+    ...payload,
+    updatedAt: nowIso(),
+  };
+
+  items[index] = updated;
+  return updated;
+}
+
+/**
+ * DELETE
+ */
+function buildDelete(resource, id, tenantId) {
+  if (!memoryStore[resource]) return null;
+
+  const index = memoryStore[resource].findIndex((item) => item.id === id);
+  if (index === -1) return null;
+
+  const deleted = memoryStore[resource][index];
+  memoryStore[resource].splice(index, 1);
+
+  return deleted;
+}
+
+export {
+  buildList,
+  buildEntity,
+  buildCreate,
+  buildUpdate,
+  buildDelete,
+};

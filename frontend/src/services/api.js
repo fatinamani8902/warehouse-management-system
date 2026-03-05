@@ -1,4 +1,4 @@
-﻿const API_BASE = "/api";
+﻿const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1`;
 
 function toSessionContext(authState) {
   return {
@@ -44,35 +44,49 @@ async function apiRequest(path, { method = "GET", body, session, signal } = {}) 
   return data;
 }
 
-function fetchSuppliers(session) {
-  return apiRequest("/master/suppliers", { session });
+async function fetchSuppliers(session) {
+  const response = await apiRequest("/master/suppliers", { session });
+  return response.data;
 }
 
-function createSupplier(session, payload) {
-  return apiRequest("/master/suppliers", { method: "POST", session, body: payload });
+async function createSupplier(session, payload) {
+  const response = await apiRequest("/master/suppliers", {
+    method: "POST",
+    session,
+    body: payload,
+  });
+
+  return response.data;
 }
 
-function updateSupplier(session, supplierId, payload) {
-  return apiRequest(`/master/suppliers/${supplierId}`, { method: "PUT", session, body: payload });
+async function updateSupplier(session, supplierId, payload) {
+  const response = await apiRequest(`/master/suppliers/${supplierId}`, {
+    method: "PUT",
+    session,
+    body: payload,
+  });
+
+  return response.data;
 }
 
 function deleteSupplier(session, supplierId) {
   return apiRequest(`/master/suppliers/${supplierId}`, { method: "DELETE", session });
 }
 
-function fetchAsns(session, params) {
-  return apiRequest(`/inbound/asn${toQueryString(params)}`, { session });
+async function fetchAsns(session, params) {
+  const response = await apiRequest(`/inbound/asn${toQueryString(params)}`, { session });
+  return response.data;
 }
 
 function createAsn(session, payload) {
   return apiRequest("/inbound/asn", { method: "POST", session, body: payload });
 }
 
-function transitionAsn(session, asnId, action) {
-  return apiRequest(`/inbound/asn/${asnId}/transition`, {
+function transitionAsn(session, asnId, action, payload) {
+  return apiRequest(`/inbound/asn/${asnId}/${action}`, {
     method: "POST",
     session,
-    body: { action },
+    body: payload,
   });
 }
 
@@ -84,11 +98,11 @@ function createGrn(session, payload) {
   return apiRequest("/inbound/grn", { method: "POST", session, body: payload });
 }
 
-function transitionGrn(session, grnId, action) {
-  return apiRequest(`/inbound/grn/${grnId}/transition`, {
+function transitionGrn(session, grnId, action, payload) {
+  return apiRequest(`/inbound/grn/${grnId}/${action}`, {
     method: "POST",
     session,
-    body: { action },
+    body: payload,
   });
 }
 

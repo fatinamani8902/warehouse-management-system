@@ -38,29 +38,24 @@ const MasterDataPage = () => {
   });
   const [formError, setFormError] = useState("");
 
-  const loadSuppliers = useCallback(async () => {
-    const requestSession = {
-      tenant_id: session.tenant_id,
-      user_id: session.user_id,
-      role_id: session.role_id,
-      warehouse_id: session.warehouse_id,
-    };
+const loadSuppliers = useCallback(async () => {
+  if (!session?.tenant_id) return;
 
-    if (!requestSession.tenant_id) {
-      return;
-    }
+  try {
+    setSupplierLoading(true);
+    setSupplierError("");
 
-    try {
-      setSupplierLoading(true);
-      setSupplierError("");
-      const suppliers = await fetchSuppliers(requestSession);
-      setSupplierRows(Array.isArray(suppliers) ? suppliers : []);
-    } catch (error) {
-      setSupplierError(error.message || "Failed to load suppliers");
-    } finally {
-      setSupplierLoading(false);
-    }
-  }, [session.tenant_id, session.user_id, session.role_id, session.warehouse_id]);
+    const suppliers = await fetchSuppliers(session);
+
+    console.log("GET suppliers:", suppliers);
+
+    setSupplierRows(Array.isArray(suppliers) ? suppliers : []);
+  } catch (error) {
+    setSupplierError(error.message || "Failed to load suppliers");
+  } finally {
+    setSupplierLoading(false);
+  }
+}, [session]);
 
   useEffect(() => {
     loadSuppliers();
@@ -71,68 +66,77 @@ const MasterDataPage = () => {
     setFormError("");
   };
 
-  const handleSaveSupplier = async () => {
-    if (!form.supplier_name.trim()) {
-      setFormError("Supplier name is required");
-      return;
-    }
+const handleSaveSupplier = async () => {
+  if (!form.supplier_name.trim()) {
+    setFormError("Supplier name is required");
+    return;
+  }
 
-    try {
-      setSavingSupplier(true);
-      setFormError("");
+  try {
+    setSavingSupplier(true);
+    setFormError("");
 
-      if (form.supplier_id) {
-        const updated = await updateSupplier(session, form.supplier_id, {
-          supplier_name: form.supplier_name.trim(),
-          is_active: form.is_active,
-        });
+    if (form.supplier_id) {
+      const updated = await updateSupplier(session, form.supplier_id, {
+        supplier_name: form.supplier_name.trim(),
+        is_active: form.is_active,
+      });
 
-        setSupplierRows((current) =>
-          current.map((row) => (row.supplier_id === updated.supplier_id ? updated : row)),
-        );
-        toast({ title: "Supplier updated", description: `${updated.supplier_id} updated` });
-      } else {
-        const created = await createSupplier(session, {
-          supplier_name: form.supplier_name.trim(),
-          is_active: form.is_active,
-        });
-
-        setSupplierRows((current) => [created, ...current]);
-        toast({ title: "Supplier created", description: `${created.supplier_id} created` });
-      }
-
-      resetForm();
-    } catch (error) {
-      setFormError(error.message || "Failed to save supplier");
-    } finally {
-      setSavingSupplier(false);
-    }
-  };
-
-  const handleDeleteSupplier = async () => {
-    if (!deleteTarget) {
-      return;
-    }
-
-    try {
-      await deleteSupplier(session, deleteTarget.supplier_id);
       setSupplierRows((current) =>
-        current.filter((row) => row.supplier_id !== deleteTarget.supplier_id),
+        current.map((row) => (row.id === updated.id ? updated : row))
       );
+
       toast({
-        title: "Supplier deleted",
-        description: `${deleteTarget.supplier_id} removed`,
+        title: "Supplier updated",
+        description: `${updated.id} updated`,
       });
-      setDeleteTarget(null);
-    } catch (error) {
+    } else {
+      const created = await createSupplier(session, {
+        supplier_name: form.supplier_name.trim(),
+        is_active: form.is_active,
+      });
+
+      setSupplierRows((current) => [created, ...current]);
+
       toast({
-        title: "Delete failed",
-        description: error.message || "Unable to delete supplier",
-        variant: "destructive",
+        title: "Supplier created",
+        description: `${created.id} created`,
       });
-      setDeleteTarget(null);
     }
-  };
+
+    resetForm();
+  } catch (error) {
+    setFormError(error.message || "Failed to save supplier");
+  } finally {
+    setSavingSupplier(false);
+  }
+};
+
+const handleDeleteSupplier = async () => {
+  if (!deleteTarget) return;
+
+  try {
+    await deleteSupplier(session, deleteTarget.id);
+
+    setSupplierRows((current) =>
+      current.filter((row) => row.id !== deleteTarget.id)
+    );
+
+    toast({
+      title: "Supplier deleted",
+      description: `${deleteTarget.id} removed`,
+    });
+
+    setDeleteTarget(null);
+  } catch (error) {
+    toast({
+      title: "Delete failed",
+      description: error.message || "Unable to delete supplier",
+      variant: "destructive",
+    });
+    setDeleteTarget(null);
+  }
+};
 
   const skuColumns = [
     { key: "id", label: "SKU ID", sortable: true },
@@ -153,46 +157,51 @@ const MasterDataPage = () => {
     { key: "bin", label: "Bin" },
   ];
 
-  const supplierColumns = [
-    { key: "supplier_id", label: "Supplier ID", sortable: true },
-    { key: "supplier_name", label: "Supplier Name", sortable: true },
-    {
-      key: "is_active",
-      label: "Status",
-      render: (record) => <StatusBadge status={record.is_active ? "active" : "inactive"} />,
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      render: (record) => (
-        <div className="flex gap-1" onClick={(event) => event.stopPropagation()}>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-[11px]"
-            onClick={() => {
-              setForm({
-                supplier_id: record.supplier_id,
-                supplier_name: record.supplier_name,
-                is_active: record.is_active,
-              });
-              setFormError("");
-            }}
-          >
-            Edit
-          </Button>
-          <Button
-            size="sm"
-            variant="destructive"
-            className="h-7 text-[11px]"
-            onClick={() => setDeleteTarget(record)}
-          >
-            Delete
-          </Button>
-        </div>
-      ),
-    },
-  ];
+const supplierColumns = [
+  { key: "id", label: "Supplier ID", sortable: true },
+  { key: "supplier_name", label: "Supplier Name", sortable: true },
+  {
+    key: "is_active",
+    label: "Status",
+    render: (record) => (
+      <StatusBadge status={record.is_active ? "active" : "inactive"} />
+    ),
+  },
+  {
+    key: "actions",
+    label: "Actions",
+    render: (record) => (
+      <div
+        className="flex gap-1"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-[11px]"
+          onClick={() => {
+            setForm({
+              supplier_id: record.id,
+              supplier_name: record.supplier_name,
+              is_active: record.is_active,
+            });
+            setFormError("");
+          }}
+        >
+          Edit
+        </Button>
+        <Button
+          size="sm"
+          variant="destructive"
+          className="h-7 text-[11px]"
+          onClick={() => setDeleteTarget(record)}
+        >
+          Delete
+        </Button>
+      </div>
+    ),
+  },
+];
 
   return (
     <AppLayout>

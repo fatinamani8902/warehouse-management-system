@@ -72,7 +72,7 @@ function createApp() {
     });
   });
 
-  app.use("/api/v1", verifyClerkJwt, v1Routes);
+  app.use("/api/v1", v1Routes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
