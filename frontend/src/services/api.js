@@ -2,10 +2,13 @@
 
 function toSessionContext(authState) {
   return {
-    tenant_id: authState?.currentTenantId || null,
-    warehouse_id: authState?.currentWarehouseId || null,
-    user_id: authState?.currentUser?.id || null,
-    role_id: authState?.currentUser?.role || null,
+    tenant_id:
+      authState?.currentTenantId ||
+      authState?.tenant_id ||
+      "TEN001",
+    warehouse_id: authState?.currentWarehouseId || "WH001",
+    user_id: authState?.currentUser?.id || "USER001",
+    role_id: authState?.currentUser?.role || "warehousemanager",
     token: authState?.clerkToken || authState?.currentUser?.token || null,
   };
 }
@@ -94,8 +97,14 @@ function fetchGrns(session, params) {
   return apiRequest(`/inbound/grn${toQueryString(params)}`, { session });
 }
 
-function createGrn(session, payload) {
-  return apiRequest("/inbound/grn", { method: "POST", session, body: payload });
+async function createGrn(session, payload) {
+  const response = await apiRequest("/inbound/grn", {
+    method: "POST",
+    session,
+    body: payload,
+  });
+
+  return response.data;
 }
 
 function transitionGrn(session, grnId, action, payload) {

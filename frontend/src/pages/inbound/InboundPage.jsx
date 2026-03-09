@@ -44,8 +44,8 @@ const asnActionLabels = {
 
 const grnActionLabels = {
   start_receiving: "Start Receiving",
-  complete: "Complete",
-  post: "Post",
+  complete: "Finish Receiving",
+  post: "Post to Inventory",
   cancel: "Cancel GRN",
 };
 
@@ -60,8 +60,8 @@ cancelled: [],
 
 const grnStatusActions = {
   draft: ["start_receiving", "cancel"],
-  receiving: ["complete", "cancel"],
-  completed: ["post", "cancel"],
+  receiving: ["complete"],
+  completed: ["post"],
   posted: [],
   cancelled: [],
 };
@@ -274,7 +274,8 @@ const updated = response.data;
     try {
       setSubmittingKey(`${record.grn_id}-${action}`);
       setError("");
-      const updated = await transitionGrn(session, record.grn_id, action);
+      const response = await transitionGrn(session, record.grn_id, action);
+      const updated = response.data;
       setGrns((current) => current.map((row) => (row.grn_id === updated.grn_id ? updated : row)));
       setSelectedGrn((current) => (current?.grn_id === updated.grn_id ? updated : current));
 
@@ -437,7 +438,7 @@ const performCancellation = async (reason) => {
       sortable: true,
       render: (row) => formatCreatedDate(row.created_at),
     },
-    { key: "received_date", label: "Date", sortable: true },
+    { key: "received_date", label: "Received Date", sortable: true },
     { key: "status", label: "Status", render: (row) => <StatusBadge status={row.status} /> },
     {
       key: "cancellation_reason",
@@ -576,6 +577,13 @@ const performCancellation = async (reason) => {
                   </div>
                 </div>
 
+                {selectedGrnDetails.notes && (
+  <div className="mt-2 text-sm">
+    <p className="text-xs text-muted-foreground">Notes</p>
+    <p>{selectedGrnDetails.notes}</p>
+  </div>
+)}
+
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-xs">
                     <thead className="bg-muted/60">
@@ -637,10 +645,27 @@ const performCancellation = async (reason) => {
             asns={asns}
             onCancel={() => setShowCreateGrn(false)}
             onCreated={(created) => {
-              setGrns((current) => [created, ...current]);
-              setShowCreateGrn(false);
-              toast({ title: "GRN created", description: `Created ${created.grn_id}` });
-            }}
+  const normalized = {
+  grn_id: created.grn_id,
+  asn_id: created.asn_id || "-",
+  supplier_name: created.supplier_name || "-",
+  created_at: created.created_at,
+  received_date: created.received_date,
+  status: created.status,
+  notes: created.notes || null,
+  cancellation_reason: created.cancellation_reason || null,
+  lines: created.lines || [],
+};
+
+  setGrns((current) => [normalized, ...current]);
+
+  setShowCreateGrn(false);
+
+  toast({
+    title: "GRN created",
+    description: `GRN ${normalized.grn_id} created`,
+  });
+}}
           />
         </DialogContent>
       </Dialog>

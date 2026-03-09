@@ -1,3 +1,8 @@
+const roleAliases = {
+  warehousemanager: "storemanager",
+  storekeeper: "storeoperator",
+};
+
 const transitionPermissions = {
   asn: {
     submit: ["superadmin", "hqadmin", "storemanager", "storeoperator"],
@@ -178,7 +183,8 @@ function canCancelDocument(roleId) {
 }
 
 function hasPermission(roleId, permissionId) {
-  const permissions = rolePermissions[roleId] || [];
+  const normalizedRole = roleAliases[roleId] || roleId;
+  const permissions = rolePermissions[normalizedRole] || [];
   return permissions.includes(permissionId);
 }
 

@@ -16,8 +16,15 @@ function mountCrud(resourcePath, resourceKey) {
   router.get(`/${resourcePath}`, validate(listSchema), listFactory(resourceKey));
   router.get(`/${resourcePath}/:id`, requireRole(["superadmin", "hqadmin", "storemanager"]), validate(idSchema), getFactory(resourceKey));
   router.post(`/${resourcePath}`, validate(createSchema), createFactory(resourceKey));
-  router.put(`/${resourcePath}/:id`, requireRole(["superadmin", "hqadmin"]), validate(updateSchema), updateFactory(resourceKey));
-  router.delete(`/${resourcePath}/:id`, requireRole(["superadmin", "hqadmin"]), validate(idSchema), deleteFactory(resourceKey));
+  router.put(`/${resourcePath}/:id`,
+  validate(updateSchema),
+  updateFactory(resourceKey)
+);
+
+router.delete(`/${resourcePath}/:id`,
+  validate(idSchema),
+  deleteFactory(resourceKey)
+);
 }
 
 mountCrud("suppliers", "suppliers");

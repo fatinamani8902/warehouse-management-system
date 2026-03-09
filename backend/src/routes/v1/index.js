@@ -12,6 +12,7 @@ import rmaRoutes from "./rmaRoutes.js";
 import traceRoutes from "../trace.js";
 import usersRoutes from "./usersRoutes.js";
 import lovRoutes from "./lovRoutes.js";
+import returnsRoutes from "../returns.js";
 
 const router = express.Router();
 
@@ -24,6 +25,7 @@ router.use(inventoryRoutes);
 router.use(pickingRoutes);
 router.use(packingRoutes);
 router.use("/shipping", shippingRoutes);
+router.use("/returns", returnsRoutes);
 router.use(rmaRoutes);
 router.use("/trace", traceRoutes);
 router.use("/users", usersRoutes);

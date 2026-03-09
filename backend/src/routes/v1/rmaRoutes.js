@@ -20,7 +20,7 @@ const rmaStub = [
 // ==============================
 // LIST RMA
 // ==============================
-router.get("/rma", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+router.get("/rma", requireRole(["superadmin", "hqadmin", "storemanager", "warehousemanager"]), (req, res) => {
   res.json({
     success: true,
     data: rmaStub
@@ -30,7 +30,7 @@ router.get("/rma", requireRole(["superadmin", "hqadmin", "storemanager"]), (req,
 // ==============================
 // GET RMA BY ID
 // ==============================
-router.get("/rma/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+router.get("/rma/:id", requireRole(["superadmin", "hqadmin", "storemanager", "warehousemanager"]), (req, res) => {
   res.json({
     success: true,
     data: {
@@ -47,7 +47,7 @@ router.get("/rma/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), (
 // ==============================
 // CREATE RMA
 // ==============================
-router.post("/rma", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+router.post("/rma", requireRole(["superadmin", "hqadmin", "storemanager", "warehousemanager"]), (req, res) => {
   res.json({
     success: true,
     message: "RMA created successfully",
@@ -63,7 +63,7 @@ router.post("/rma", requireRole(["superadmin", "hqadmin", "storemanager"]), (req
 // ==============================
 // UPDATE RMA
 // ==============================
-router.put("/rma/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+router.put("/rma/:id", requireRole(["superadmin", "hqadmin", "storemanager", "warehousemanager"]), (req, res) => {
   res.json({
     success: true,
     message: "RMA updated successfully",
@@ -87,7 +87,7 @@ router.delete("/rma/:id", requireRole(["superadmin", "hqadmin"]), (req, res) => 
 // ==============================
 // CANCEL RMA
 // ==============================
-router.post("/rma/:id/cancel", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+router.post("/rma/:id/cancel", requireRole(["superadmin", "hqadmin", "storemanager", "warehousemanager"]), (req, res) => {
   res.json({
     success: true,
     message: `RMA ${req.params.id} cancelled successfully`
@@ -97,7 +97,7 @@ router.post("/rma/:id/cancel", requireRole(["superadmin", "hqadmin", "storemanag
 // ==============================
 // PROGRESS RMA
 // ==============================
-router.post("/rma/:id/progress", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+router.post("/rma/:id/progress", requireRole(["superadmin", "hqadmin", "storemanager", "warehousemanager"]), (req, res) => {
   res.json({
     success: true,
     message: `RMA ${req.params.id} progressed successfully`

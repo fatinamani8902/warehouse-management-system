@@ -124,7 +124,7 @@ function toRmaDetail(tenantId, rma) {
 }
 
 router.get("/", (req, res) => {
-  if (!canViewReturns(req.session.role_id)) {
+  if (!canViewReturns(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to view returns" });
   }
 
@@ -133,7 +133,7 @@ router.get("/", (req, res) => {
 });
 
 router.post("/", (req, res) => {
-  if (!canCreateReturn(req.session.role_id)) {
+  if (!canCreateReturn(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to create returns" });
   }
 
@@ -169,7 +169,7 @@ router.post("/", (req, res) => {
 });
 
 router.get("/:returnId", (req, res) => {
-  if (!canViewReturns(req.session.role_id)) {
+  if (!canViewReturns(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to view returns" });
   }
 
@@ -189,7 +189,7 @@ router.get("/:returnId", (req, res) => {
 });
 
 router.patch("/:returnId/cancel", (req, res) => {
-  if (!canCancelReturn(req.session.role_id)) {
+  if (!canCancelReturn(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to cancel returns" });
   }
 
@@ -243,7 +243,7 @@ router.patch("/:returnId/cancel", (req, res) => {
 });
 
 router.post("/:returnId/rma", (req, res) => {
-  if (!canCreateRma(req.session.role_id)) {
+  if (!canCreateRma(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to create RMAs" });
   }
 

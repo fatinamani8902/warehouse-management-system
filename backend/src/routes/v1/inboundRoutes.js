@@ -224,17 +224,37 @@ router.get("/grn/:id", (req, res) => {
 });
 
 router.post("/grn", (req, res) => {
+
+  const asn = inboundStub.find(i => i.asn_id === req.body.asn_id);
+
+  if (!asn) {
+    return res.status(400).json({
+      success: false,
+      message: "ASN not found"
+    });
+  }
+
+  const grnCount = inboundStub.filter(i => i.grn_id).length + 1;
+
+  const newGrn = {
+  grn_id: `GRN${String(grnCount).padStart(6, "0")}`,
+  asn_id: asn.asn_id,
+  supplier_name: asn.supplier_name,
+  created_at: new Date().toISOString(),
+  received_date: req.body.received_date,
+  status: "draft",
+  lines: [],
+  notes: req.body.notes || null,
+  cancellation_reason: null
+};
+
+  inboundStub.push(newGrn);
+
   res.json({
     success: true,
-    message: "GRN created successfully",
-    data: {
-      id: "GRN000003",
-      ...req.body,
-      tenantId: "TEN001",
-      status: "RECEIVED",
-      createdAt: new Date().toISOString(),
-    },
+    data: newGrn
   });
+
 });
 
 router.put("/grn/:id", (req, res) => {
@@ -348,10 +368,60 @@ asn.cancellation_reason = req.body?.cancellation_reason ?? "Cancelled by user";
 });
 
 router.post("/grn/:id/cancel", (req, res) => {
+
+  const grn = inboundStub.find(i => i.grn_id === req.params.id);
+
+  if (!grn) {
+    return res.status(404).json({
+      success: false,
+      message: "GRN not found"
+    });
+  }
+
+  grn.status = "cancelled";
+  grn.cancellation_reason = req.body?.cancellation_reason || null;
+
   res.json({
     success: true,
-    message: `GRN ${req.params.id} cancelled successfully`,
+    data: grn
   });
+
 });
 
+router.post("/grn/:id/:action", (req, res) => {
+
+  const grn = inboundStub.find(i => i.grn_id === req.params.id);
+
+  if (!grn) {
+    return res.status(404).json({
+      success: false,
+      message: "GRN not found"
+    });
+  }
+
+  const action = req.params.action;
+
+  if (action === "start_receiving") {
+    grn.status = "receiving";
+  }
+
+  if (action === "complete") {
+    grn.status = "completed";
+  }
+
+  if (action === "post") {
+    grn.status = "posted";
+  }
+
+  if (action === "cancel") {
+    grn.status = "cancelled";
+    grn.cancellation_reason = req.body?.cancellation_reason || null;
+  }
+
+  res.json({
+    success: true,
+    data: grn
+  });
+
+});
 export default router;

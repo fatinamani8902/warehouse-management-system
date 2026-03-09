@@ -88,7 +88,9 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
           onChange={(event) => setAsnId(event.target.value)}
         >
           <option value="">No ASN (Direct Receipt)</option>
-          {(asns || []).map((asn) => (
+          {(asns || [])
+  .filter((asn) => asn.asn_id)
+  .map((asn) => (
             <option key={asn.asn_id} value={asn.asn_id}>
               {asn.asn_id} - {asn.status.replace(/_/g, " ")}
             </option>
