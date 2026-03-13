@@ -27,9 +27,10 @@ const menuSections = [
     },
     {
         header: "Outbound Operations",
-        items: [
-            { label: "Shipping", icon: Truck, path: "/shipping" },
-        ],
+  items: [
+    { label: "Outbound", icon: Truck, path: "/outbound", tooltip: "Outbound Orders" },
+    { label: "Shipping", icon: Truck, path: "/shipping" },
+  ],
     },
     {
         header: "Trace & Visibility",
@@ -62,7 +63,7 @@ export const AppSidebar = () => {
             <svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
               <rect x="8" y="8" width="48" height="48" rx="12" fill="#2563eb"/>
               <circle cx="32" cy="32" r="16" fill="#fff"/>
-              <text x="32" y="38" font-size="18" text-anchor="middle" fill="#2563eb" font-family="Arial" font-weight="bold">W</text>
+              <text  x="32" y="38" fontSize="18" textAnchor="middle" fill="#2563eb" fontFamily="Arial" fontWeight="bold">W</text>
             </svg>
             <span className="text-base font-semibold text-sidebar-primary whitespace-nowrap">WMS</span>
           </div>)}

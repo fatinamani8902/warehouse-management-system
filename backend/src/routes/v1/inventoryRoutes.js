@@ -3,139 +3,160 @@ import { requireRole } from "../../middlewares/auth.js";
 
 const router = express.Router();
 
-// ==============================
-// INVENTORY SUMMARY
-// ==============================
-router.get("/inventory/summary", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+const allowedRoles = [
+  "superadmin",
+  "hqadmin",
+  "storemanager",
+  "warehousemanager",
+  "storeoperator"
+];
+
+/* ==============================
+   INVENTORY OPTIONS
+============================== */
+router.get("/options", requireRole(allowedRoles), (req, res) => {
+
   res.json({
-    success: true,
-    data: {
-      totalItems: 100,
-      totalQuantity: 5000,
-      lowStockItems: 5,
-      tenantId: "TEN001"
+    zones: [
+      { zone_id: "PICK", zone_name: "Picking Zone" },
+      { zone_id: "STORAGE", zone_name: "Storage Zone" }
+    ],
+
+    locations: [
+      { location_id: "LOC001", location_code: "A01-01" },
+      { location_id: "LOC002", location_code: "B01-01" }
+    ],
+
+    reason_codes: [
+      { reason_code: "DMG", reason_name: "Damaged" },
+      { reason_code: "MISS", reason_name: "Missing" }
+    ],
+
+    count_config: {
+      variance_threshold_mode: "absolute",
+      variance_threshold_abs: 5
     }
+
   });
+
 });
 
-// ==============================
-// INVENTORY STOCK LIST
-// ==============================
-router.get("/inventory/stock", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
+/* ==============================
+   STOCK SUMMARY
+============================== */
+router.get("/summary", requireRole(allowedRoles), (req, res) => {
+
   res.json({
-    success: true,
-    data: [
+    items: [
       {
-        id: "STK000001",
-        sku: "ITEM001",
-        quantity: 100,
-        location: "A1",
-        tenantId: "TEN001"
+        sku_id: "SKU000001",
+        sku_description: "Product A",
+        location_id: "LOC001",
+        location_code: "A01-01",
+        zone_id: "PICK",
+        on_hand_qty: 100,
+        reserved_qty: 10,
+        available_qty: 90,
+        quarantine_qty: 0
+      },
+      {
+        sku_id: "SKU000002",
+        sku_description: "Product B",
+        location_id: "LOC002",
+        location_code: "B01-01",
+        zone_id: "STORAGE",
+        on_hand_qty: 50,
+        reserved_qty: 5,
+        available_qty: 45,
+        quarantine_qty: 0
+      }
+    ],
+    total: 2
+  });
+
+});
+
+/* ==============================
+   COUNT PLANS
+============================== */
+router.get("/count-plans", requireRole(allowedRoles), (req, res) => {
+
+  res.json({
+    items: [
+      {
+        count_id: "CC000001",
+        zone_id: "PICK",
+        planned_date: "2026-03-15",
+        lines_count: 10,
+        status: "DRAFT"
+      }
+    ],
+    total: 1
+  });
+
+});
+
+/* ==============================
+   COUNT PLAN DETAIL
+============================== */
+router.get("/count-plans/:id", requireRole(allowedRoles), (req, res) => {
+
+  res.json({
+    count_id: req.params.id,
+    zone_id: "PICK",
+    planned_date: "2026-03-15",
+    status: "DRAFT",
+    created_at: new Date(),
+
+    lines: [
+      {
+        line_id: "LINE001",
+        sku_id: "SKU000001",
+        location_id: "LOC001",
+        system_qty: 100,
+        counted_qty: null,
+        variance_qty: null,
+        status: "OPEN"
       }
     ]
   });
+
 });
 
-// ==============================
-// CREATE ADJUSTMENT
-// ==============================
-router.post("/inventory/adjustments", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: "Inventory adjustment created successfully",
-    data: {
-      id: "ADJ000001",
-      ...req.body,
-      tenantId: "TEN001"
-    }
-  });
-});
+/* ==============================
+   ADJUSTMENTS LIST
+============================== */
+router.get("/adjustments", requireRole(allowedRoles), (req, res) => {
 
-// ==============================
-// CYCLE COUNT LIST
-// ==============================
-router.get("/cycle-counts", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
   res.json({
-    success: true,
-    data: [
+    items: [
       {
-        id: "CC000001",
-        status: "CREATED",
-        tenantId: "TEN001"
+        adj_id: "ADJ000001",
+        sku_id: "SKU000001",
+        location_id: "LOC001",
+        qty_delta: -5,
+        reason_code: "DMG",
+        status: "SUBMITTED",
+        requested_at: new Date()
       }
-    ]
+    ],
+    total: 1
   });
+
 });
 
-// GET CYCLE COUNT BY ID
-router.get("/cycle-counts/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      status: "CREATED",
-      tenantId: "TEN001"
-    }
-  });
-});
+/* ==============================
+   CREATE ADJUSTMENT
+============================== */
+router.post("/adjustments", requireRole(allowedRoles), (req, res) => {
 
-// CREATE CYCLE COUNT
-router.post("/cycle-counts", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
   res.json({
-    success: true,
-    message: "Cycle count created successfully",
-    data: {
-      id: "CC000002",
-      ...req.body,
-      status: "CREATED",
-      tenantId: "TEN001"
-    }
+    adj_id: "ADJ000002",
+    ...req.body,
+    status: "SUBMITTED",
+    requested_at: new Date()
   });
-});
 
-// UPDATE CYCLE COUNT
-router.put("/cycle-counts/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: "Cycle count updated successfully",
-    data: {
-      id: req.params.id,
-      ...req.body
-    }
-  });
-});
-
-// DELETE CYCLE COUNT
-router.delete("/cycle-counts/:id", requireRole(["superadmin", "hqadmin"]), (req, res) => {
-  res.json({
-    success: true,
-    message: `Cycle count ${req.params.id} deleted successfully`
-  });
-});
-
-// START CYCLE COUNT
-router.post("/cycle-counts/:id/start", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: `Cycle count ${req.params.id} started successfully`
-  });
-});
-
-// SCAN CYCLE COUNT
-router.post("/cycle-counts/scan", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: "Scan recorded successfully",
-    data: req.body
-  });
-});
-
-// COMPLETE CYCLE COUNT
-router.post("/cycle-counts/:id/complete", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: `Cycle count ${req.params.id} completed successfully`
-  });
 });
 
 export default router;

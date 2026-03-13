@@ -173,6 +173,9 @@ const db = {
       ],
     },
   ],
+
+  orders: [],
+
   skus: [
     {
       sku_id: "SKU000001",
@@ -3970,3 +3973,4 @@ export {
   updateRma,
   updateSupplier,
 };
+export { db };

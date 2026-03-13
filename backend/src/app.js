@@ -10,11 +10,14 @@ import { requestLogger } from "./middlewares/requestLogger.js";
 import { createApiRateLimiter } from "./middlewares/rateLimit.js";
 import { verifyClerkJwt } from "./middlewares/auth.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
+import outboundRoutes from "./routes/v1/outboundRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const rootEnvPath = path.resolve(__dirname, "../../.env");
+const rootEnvPath = path.resolve(__dirname, "../.env");
 dotenv.config({ path: rootEnvPath });
+
+console.log("CLERK_JWKS_URL =", process.env.CLERK_JWKS_URL);
 
 function parseCorsAllowlist() {
   const raw = process.env.CORS_ALLOWLIST || process.env.FRONTEND_ORIGIN || "http://localhost:5173";
@@ -51,10 +54,13 @@ function createApp() {
 
   app.use(requestContext);
   app.use(helmet());
-  app.use(cors(buildCorsOptions()));
+  app.use(cors(buildCorsOptions()));   // WAJIB sebelum routes
   app.use(express.json({ limit: "1mb" }));
   app.use(createApiRateLimiter());
   app.use(requestLogger);
+
+  app.use("/api/v1/outbound", outboundRoutes);
+  app.use("/api/v1", v1Routes);
 
   app.get("/", (_req, res) => {
     res.json({
@@ -71,8 +77,6 @@ function createApp() {
       timestamp: new Date().toISOString(),
     });
   });
-
-  app.use("/api/v1", v1Routes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

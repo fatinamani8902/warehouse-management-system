@@ -1,90 +1,137 @@
-import { buildList, buildEntity, buildCreate, buildUpdate, buildDelete } from "./sharedService.js";
 import { nowIso } from "../utils/mock.js";
+import { db } from "../data/store.js";
 
-function listOrders(context, { page, pageSize }) {
-  return buildList("orders", "ORD", context.tenantId, page, pageSize, {
-    status: "DRAFT",
-    orderType: "OUTBOUND",
-  });
+/* ---------- LIST ORDERS ---------- */
+
+function listOrders(context, { page = 1, pageSize = 20 }) {
+
+  const tenantOrders = db.orders.filter(
+    o => o.tenant_id === context.tenantId
+  );
+
+  return {
+    items: tenantOrders,
+    total: tenantOrders.length,
+    page,
+    pageSize
+  };
 }
 
-function getOrder(context, id) {
-  return buildEntity("orders", "ORD", id, context.tenantId, {
-    status: "DRAFT",
-    orderType: "OUTBOUND",
-  });
+
+/* ---------- GET ORDER ---------- */
+
+function getOrder(context, orderId) {
+
+  return db.orders.find(
+    o => o.order_id === orderId && o.tenant_id === context.tenantId
+  ) || null;
+
 }
+
+
+/* ---------- CREATE ORDER ---------- */
 
 function createOrder(context, payload) {
-  return buildCreate("orders", "ORD", context.tenantId, payload, {
-    status: "DRAFT",
-    orderType: "OUTBOUND",
-  });
-}
 
-function updateOrder(context, id, payload) {
-  return buildUpdate("orders", "ORD", id, context.tenantId, payload, {
-    status: "ALLOCATED",
-    orderType: "OUTBOUND",
-  });
-}
+  const tenantOrders = db.orders.filter(
+    o => o.tenant_id === context.tenantId
+  );
 
-function deleteOrder(context, id) {
-  return buildDelete("orders", id, context.tenantId);
-}
+  const orderId =
+    "ORD" +
+    String(tenantOrders.length + 1).padStart(4, "0");
 
-function listPickingTasks(context, { page, pageSize, status, assignee }) {
-  return buildList("pickingTasks", "PCK", context.tenantId, page, pageSize, {
-    status: status || "READY",
-    assignee: assignee || context.userId,
-  });
-}
+  const newOrder = {
 
-function startPickingTask(context, id) {
-  return {
-    ...buildEntity("pickingTasks", "PCK", id, context.tenantId, {
-      status: "STARTED",
-    }),
-    startedBy: context.userId,
-    startedAt: nowIso(),
+    order_id: orderId,
+    tenant_id: context.tenantId,
+
+    customer_name: payload.customer_name || "",
+    notes: payload.notes || "",
+
+    status: "draft",
+
+    lines: [],
+    lines_count: 0,
+
+    created_at: nowIso(),
+    created_by: context.userId,
+
+    cancellation_reason: null
   };
+
+  db.orders.push(newOrder);
+
+  return newOrder;
 }
 
-function processPickingScan(context, payload) {
-  return {
-    tenantId: context.tenantId,
-    taskId: payload.taskId,
-    sku: payload.sku,
-    qty: payload.qty,
-    barcode: payload.barcode || null,
-    rfid: payload.rfid || null,
-    status: "PICKING_PENDING",
-    scanResult: "ACCEPTED",
-    scannedBy: context.userId,
-    scannedAt: nowIso(),
+
+/* ---------- UPDATE ORDER ---------- */
+
+function updateOrder(context, orderId, payload) {
+
+  const order = db.orders.find(
+    o => o.order_id === orderId && o.tenant_id === context.tenantId
+  );
+
+  if (!order) return null;
+
+  Object.assign(order, payload);
+
+  return order;
+}
+
+
+/* ---------- DELETE ORDER ---------- */
+
+function deleteOrder(context, orderId) {
+
+  const index = db.orders.findIndex(
+    o => o.order_id === orderId && o.tenant_id === context.tenantId
+  );
+
+  if (index === -1) return false;
+
+  db.orders.splice(index, 1);
+
+  return true;
+}
+
+
+/* ---------- RELEASE ORDER ---------- */
+
+function releaseOrder(context, orderId) {
+
+  const order = db.orders.find(
+    o => o.order_id === orderId && o.tenant_id === context.tenantId
+  );
+
+  if (!order) {
+    return { error: "Order not found" };
+  }
+
+  if (!order.lines || order.lines.length === 0) {
+    return { error: "Order has no lines" };
+  }
+
+  order.status = "released";
+
+  const pickingTask = {
+    task_id:
+      "PCK" +
+      String(Math.floor(Math.random() * 1000)).padStart(3, "0"),
+    order_id: orderId,
+    tenant_id: context.tenantId,
+    status: "READY",
+    assignee: context.userId,
+    created_at: nowIso(),
   };
-}
+  
+  db.pickingTasks.push(pickingTask);
 
-function completePickingTask(context, id) {
   return {
-    ...buildEntity("pickingTasks", "PCK", id, context.tenantId, {
-      status: "COMPLETED",
-    }),
-    completedBy: context.userId,
-    completedAt: nowIso(),
-  };
-}
-
-function confirmShipping(context, payload) {
-  return {
-    tenantId: context.tenantId,
-    shippingId: payload.shipmentId || payload.orderId || "SHP000001",
-    orderId: payload.orderId || "ORD000001",
-    carrier: payload.carrier || "DHL",
-    trackingNo: payload.trackingNo || "TRK000001",
-    status: "COMPLETED",
-    confirmedBy: context.userId,
-    confirmedAt: nowIso(),
+    order,
+    pickingTask
   };
 }
 
@@ -94,9 +141,5 @@ export {
   createOrder,
   updateOrder,
   deleteOrder,
-  listPickingTasks,
-  startPickingTask,
-  processPickingScan,
-  completePickingTask,
-  confirmShipping,
+  releaseOrder
 };

@@ -28,6 +28,15 @@ function deleteOrder(req, res) {
   return sendSuccess(res, req, data);
 }
 
+/* ---------- RELEASE ORDER (NEW) ---------- */
+
+function releaseOrder(req, res) {
+  const data = outboundService.releaseOrder(req.context, req.params.id);
+  return sendSuccess(res, req, data);
+}
+
+/* ---------- PICKING ---------- */
+
 function listPickingTasks(req, res) {
   const result = outboundService.listPickingTasks(req.context, {
     ...parsePagination(req.query),
@@ -52,6 +61,8 @@ function completePickingTask(req, res) {
   return sendSuccess(res, req, data);
 }
 
+/* ---------- SHIPPING ---------- */
+
 function confirmShipping(req, res) {
   const data = outboundService.confirmShipping(req.context, req.body);
   return sendSuccess(res, req, data);
@@ -63,6 +74,7 @@ export {
   createOrder,
   updateOrder,
   deleteOrder,
+  releaseOrder, // ✅ NEW EXPORT
   listPickingTasks,
   startPickingTask,
   processPickingScan,

@@ -1,6 +1,7 @@
 import express from "express";
-import { requireRole } from "../../middlewares/auth.js";
+import { verifyClerkJwt, requireRole } from "../../middlewares/auth.js";
 import { validate } from "../../middlewares/validate.js";
+
 import {
   listSchema,
   createOrderSchema,
@@ -10,6 +11,7 @@ import {
   pickingScanSchema,
   shippingConfirmSchema,
 } from "../../validators/outboundValidators.js";
+
 import {
   listOrders,
   getOrder,
@@ -21,20 +23,174 @@ import {
   processPickingScan,
   completePickingTask,
   confirmShipping,
+  releaseOrder, // ✅ NEW
 } from "../../controllers/outboundController.js";
 
 const router = express.Router();
 
-router.get("/orders", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(listSchema), listOrders);
-router.get("/orders/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(idSchema), getOrder);
-router.post("/orders", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(createOrderSchema), createOrder);
-router.put("/orders/:id", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(updateOrderSchema), updateOrder);
-router.delete("/orders/:id", requireRole(["superadmin", "hqadmin"]), validate(idSchema), deleteOrder);
+/* --------------------------
+   Outbound Orders
+-------------------------- */
 
-router.get("/picking/tasks", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(listPickingTasksSchema), listPickingTasks);
-router.post("/picking/tasks/:id/start", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(idSchema), startPickingTask);
-router.post("/picking/scan", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(pickingScanSchema), processPickingScan);
-router.post("/picking/tasks/:id/complete", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(idSchema), completePickingTask);
-router.post("/shipping/confirm", requireRole(["superadmin", "hqadmin", "storemanager"]), validate(shippingConfirmSchema), confirmShipping);
+router.get(
+  "/orders",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+    "storekeeper",
+  ]),
+  validate(listSchema),
+  listOrders
+);
+
+router.get(
+  "/orders/:id",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+    "storekeeper",
+  ]),
+  validate(idSchema),
+  getOrder
+);
+
+router.post(
+  "/orders",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+  ]),
+  validate(createOrderSchema),
+  createOrder
+);
+
+router.put(
+  "/orders/:id",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+  ]),
+  validate(updateOrderSchema),
+  updateOrder
+);
+
+router.delete(
+  "/orders/:id",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+  ]),
+  validate(idSchema),
+  deleteOrder
+);
+
+/* --------------------------
+   RELEASE ORDER
+   (Generate Pick List)
+-------------------------- */
+
+router.post(
+  "/orders/:id/release",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+  ]),
+  releaseOrder
+);
+
+/* --------------------------
+   Picking Operations
+-------------------------- */
+
+router.get(
+  "/picking/tasks",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+    "storekeeper",
+  ]),
+  validate(listPickingTasksSchema),
+  listPickingTasks
+);
+
+router.post(
+  "/picking/tasks/:id/start",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+    "storekeeper",
+  ]),
+  validate(idSchema),
+  startPickingTask
+);
+
+router.post(
+  "/picking/scan",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+    "storekeeper",
+  ]),
+  validate(pickingScanSchema),
+  processPickingScan
+);
+
+router.post(
+  "/picking/tasks/:id/complete",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+    "storekeeper",
+  ]),
+  validate(idSchema),
+  completePickingTask
+);
+
+/* --------------------------
+   Shipping
+-------------------------- */
+
+router.post(
+  "/shipping/confirm",
+  verifyClerkJwt,
+  requireRole([
+    "superadmin",
+    "hqadmin",
+    "storemanager",
+    "warehousemanager",
+  ]),
+  validate(shippingConfirmSchema),
+  confirmShipping
+);
 
 export default router;

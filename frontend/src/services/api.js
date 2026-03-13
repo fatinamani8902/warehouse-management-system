@@ -24,7 +24,7 @@ async function apiRequest(path, { method = "GET", body, session, signal } = {}) 
       "Content-Type": "application/json",
       "x-tenant-id": session.tenant_id,
       "x-user-id": session.user_id || "",
-      "x-role-id": session.role_id || "readonly",
+      "x-roles": session.role_id || "superadmin",
       "x-warehouse-id": session.warehouse_id || "",
       "x-client-source": "PORTAL",
       ...(session.token ? { Authorization: `Bearer ${session.token}` } : {}),
@@ -388,7 +388,54 @@ function cancelAdjustmentRequest(session, adjId, payload) {
   });
 }
 
+/* -------------------------
+   OUTBOUND ORDERS
+------------------------- */
+
+function fetchOrders(session, params) {
+  return apiRequest(`/outbound/orders${toQueryString(params)}`, { session });
+}
+
+function fetchOrderById(session, orderId) {
+  return apiRequest(`/outbound/orders/${orderId}`, { session });
+}
+
+function createOrder(session, payload) {
+  return apiRequest("/outbound/orders", {
+    method: "POST",
+    session,
+    body: payload,
+  });
+}
+
+function updateOrder(session, orderId, payload) {
+  return apiRequest(`/outbound/orders/${orderId}`, {
+    method: "PUT",
+    session,
+    body: payload,
+  });
+}
+
+function deleteOrder(session, orderId) {
+  return apiRequest(`/outbound/orders/${orderId}`, {
+    method: "DELETE",
+    session,
+  });
+}
+
+function releaseOrder(session, orderId) {
+  return apiRequest(`/outbound/orders/${orderId}/release`, {
+    method: "POST",
+    session,
+  });
+}
+
 export {
+  fetchOrders,
+  fetchOrderById,
+  createOrder,
+  updateOrder,
+  deleteOrder,
   addCountPlanEntry,
   approveAdjustmentRequest,
   approveCountPlan,
@@ -439,6 +486,7 @@ export {
   rejectAdjustmentRequest,
   rejectCountPlan,
   recomputePutawayBin,
+  releaseOrder, 
   submitAdjustmentRequest,
   submitCountPlan,
   toSessionContext,
