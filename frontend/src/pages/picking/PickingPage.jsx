@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { canUpdatePickingStatus } from "@/services/rbac";
 import { fetchPickListById, fetchPickLists, toSessionContext } from "@/services/api";
 
 const initialFilters = { search: "", status: "" };
@@ -79,6 +80,7 @@ const PickingPage = () => {
   const location = useLocation();
   const auth = useAuth();
   const session = useMemo(() => toSessionContext(auth), [auth]);
+  const userRole = auth.currentUser?.role || "";
   const roleId = useMemo(() => normalizeRole(auth.currentUser?.role), [auth.currentUser?.role]);
   const canView = useMemo(
     () => ["superadmin", "hqadmin", "storemanager", "storeoperator", "auditor", "readonly"].includes(roleId),

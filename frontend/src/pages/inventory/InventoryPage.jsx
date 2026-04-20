@@ -287,9 +287,9 @@ const InventoryPage = () => {
   const session = useMemo(() => toSessionContext(auth), [auth]);
   const roleId = useMemo(() => normalizeRole(session.role_id), [session.role_id]);
 
-  const canCreateCount = useMemo(() => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId), [roleId]);
-  const canExecuteCount = canCreateCount;
-  const canSubmitCount = canCreateCount;
+  const canCreateCount = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
+  const canExecuteCount = useMemo(() => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId), [roleId]);
+  const canSubmitCount = useMemo(() => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId), [roleId]);
   const canApproveCount = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
   const canCancelCountByRole = canApproveCount;
 
@@ -1067,9 +1067,9 @@ const InventoryPage = () => {
                   Clear
                 </Button>
                 <Button variant="outline" className="h-9" onClick={loadCountPlans}>Refresh</Button>
-                <Button className="h-9" onClick={() => setCreateCountOpen(true)} disabled={!canCreateCount || Boolean(busyKey)}>
-                  New Count Plan
-                </Button>
+                {canCreateCount && (
+                  <Button className="h-9" onClick={() => setCreateCountOpen(true)} disabled={Boolean(busyKey)}>New Count Plan</Button>
+                )}
               </div>
 
               {countError && <p className="text-sm text-destructive">{countError}</p>}

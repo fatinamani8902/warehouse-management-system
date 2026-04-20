@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { canEditMasterData, canDeleteMasterData } from "@/services/rbac";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchSuppliers, createSupplier, updateSupplier, deleteSupplier,
@@ -292,6 +293,7 @@ const MasterDataPage = () => {
   const auth = useAuth();
   const { toast } = useToast();
   const session = useMemo(() => toSessionContext(auth), [auth]);
+  const userRole = auth.currentUser?.role || "";
 
   // ── Suppliers ──
   const [supplierRows, setSupplierRows] = useState([]);
@@ -332,7 +334,7 @@ const MasterDataPage = () => {
   const [warehouseRows, setWarehouseRows] = useState([]);
   const [warehouseLoading, setWarehouseLoading] = useState(true);
   const [savingWarehouse, setSavingWarehouse] = useState(false);
-  const [warehouseForm, setWarehouseForm] = useState({ warehouse_id: "", warehouse_name: "" });
+  const [warehouseForm, setWarehouseForm] = useState({ warehouse_id: "", warehouse_name: "", city: "", country: "" });
   const [warehouseSearch, setWarehouseSearch] = useState("");
   const [isEditingWarehouse, setIsEditingWarehouse] = useState(false);
   const [warehouseDeleteTarget, setWarehouseDeleteTarget] = useState(null);
@@ -539,16 +541,23 @@ const MasterDataPage = () => {
     try {
       setSavingWarehouse(true); setWarehouseFormError("");
       if (isEditingWarehouse) {
-        // Update name only — warehouse_id is immutable
-        setWarehouseRows((c) => c.map((r) => r.warehouse_id === warehouseForm.warehouse_id ? { ...r, warehouse_name: warehouseForm.warehouse_name.trim() } : r));
+        // Update name, city, country — warehouse_id is immutable
+        setWarehouseRows((c) => c.map((r) => r.warehouse_id === warehouseForm.warehouse_id
+          ? { ...r, warehouse_name: warehouseForm.warehouse_name.trim(), city: warehouseForm.city.trim(), country: warehouseForm.country.trim() }
+          : r));
         toast({ title: "Warehouse updated" });
       } else {
-        const result = await createWarehouseApi(session, { warehouse_id: warehouseForm.warehouse_id.trim().toUpperCase(), warehouse_name: warehouseForm.warehouse_name.trim() });
+        const result = await createWarehouseApi(session, {
+          warehouse_id: warehouseForm.warehouse_id.trim().toUpperCase(),
+          warehouse_name: warehouseForm.warehouse_name.trim(),
+          city: warehouseForm.city.trim(),
+          country: warehouseForm.country.trim(),
+        });
         const created = result?.data ?? result;
         setWarehouseRows((c) => [...c, created]);
         toast({ title: "Warehouse created" });
       }
-      setWarehouseForm({ warehouse_id: "", warehouse_name: "" });
+      setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" });
       setIsEditingWarehouse(false);
     } catch (err) { setWarehouseFormError(err.message || "Failed to save warehouse"); }
     finally { setSavingWarehouse(false); }
@@ -741,11 +750,17 @@ const MasterDataPage = () => {
                 <FormField label="Warehouse Name" required>
                   <Input value={warehouseForm.warehouse_name} onChange={(e) => setWarehouseForm((c) => ({ ...c, warehouse_name: e.target.value }))} placeholder="e.g. South Distribution Center" disabled={savingWarehouse} />
                 </FormField>
+                <FormField label="City">
+                  <Input value={warehouseForm.city} onChange={(e) => setWarehouseForm((c) => ({ ...c, city: e.target.value }))} placeholder="e.g. Shah Alam" disabled={savingWarehouse} />
+                </FormField>
+                <FormField label="Country">
+                  <Input value={warehouseForm.country} onChange={(e) => setWarehouseForm((c) => ({ ...c, country: e.target.value }))} placeholder="e.g. MY" disabled={savingWarehouse} />
+                </FormField>
               </div>
               {warehouseFormError && <p className="text-xs text-destructive">{warehouseFormError}</p>}
               <div className="flex gap-2 justify-end pt-1">
-                {isEditingWarehouse && <Button size="sm" variant="outline" onClick={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "" }); setIsEditingWarehouse(false); setWarehouseFormError(""); }} disabled={savingWarehouse}>Cancel Edit</Button>}
-                <Button size="sm" variant="outline" onClick={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "" }); setWarehouseFormError(""); }} disabled={savingWarehouse}>Clear</Button>
+                {isEditingWarehouse && <Button size="sm" variant="outline" onClick={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" }); setIsEditingWarehouse(false); setWarehouseFormError(""); }} disabled={savingWarehouse}>Cancel Edit</Button>}
+                <Button size="sm" variant="outline" onClick={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" }); setWarehouseFormError(""); }} disabled={savingWarehouse}>Clear</Button>
                 <Button size="sm" onClick={handleSaveWarehouse} disabled={savingWarehouse}>{savingWarehouse ? "Saving..." : isEditingWarehouse ? "Update Warehouse" : "Add Warehouse"}</Button>
               </div>
             </CardContent>
@@ -763,8 +778,10 @@ const MasterDataPage = () => {
             columns={[
               { key: "warehouse_id", label: "Warehouse ID", render: (r) => <span className="font-mono text-xs">{r.warehouse_id}</span> },
               { key: "warehouse_name", label: "Name" },
+              { key: "city", label: "City", render: (r) => r.city || "-" },
+              { key: "country", label: "Country", render: (r) => r.country || "-" },
               { key: "actions", label: "Actions", render: (r) => <TableActions
-                onEdit={() => { setWarehouseForm({ warehouse_id: r.warehouse_id, warehouse_name: r.warehouse_name }); setIsEditingWarehouse(true); setWarehouseFormError(""); }}
+                onEdit={() => { setWarehouseForm({ warehouse_id: r.warehouse_id, warehouse_name: r.warehouse_name, city: r.city || "", country: r.country || "" }); setIsEditingWarehouse(true); setWarehouseFormError(""); }}
                 onDelete={() => setWarehouseDeleteTarget(r)}
               /> },
             ]}

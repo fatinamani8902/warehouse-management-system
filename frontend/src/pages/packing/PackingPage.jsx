@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/contexts/AuthContext";
+import { canConfirmPacking } from "@/services/rbac";
 import { useToast } from "@/hooks/use-toast";
 import {
   confirmPacking,
@@ -82,6 +83,7 @@ const PackingPage = () => {
   const auth = useAuth();
   const { toast } = useToast();
   const session = useMemo(() => toSessionContext(auth), [auth]);
+  const userRole = auth.currentUser?.role || "";
   const roleId = useMemo(() => normalizeRole(auth.currentUser?.role), [auth.currentUser?.role]);
   const canView = useMemo(
     () => ["superadmin", "hqadmin", "storemanager", "storeoperator", "auditor", "readonly"].includes(roleId),

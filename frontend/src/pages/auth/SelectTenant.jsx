@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,20 +9,23 @@ const SelectTenant = () => {
     const navigate = useNavigate();
     const userTenants = getUserTenants();
     const handleSelect = (tenantId) => {
-        selectTenant(tenantId);
-        navigate("/select-warehouse");
+    selectTenant(tenantId);
+    navigate("/select-warehouse");
     };
-    // Auto-redirect if only one tenant
+
+    useEffect(() => {
     if (userTenants.length === 1) {
         handleSelect(userTenants[0].id);
-        return null;
     }
+    }, [userTenants.length]);
+
+if (userTenants.length === 1) return null;
     return (<div className="min-h-screen flex items-center justify-center bg-muted/50">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
           <Building2 className="mx-auto h-8 w-8 text-primary mb-2"/>
           <CardTitle>Select Tenant</CardTitle>
-          <CardDescription>Welcome, {currentUser?.name}. Choose your organization.</CardDescription>
+          <CardDescription>Welcome{currentUser?.name || currentUser?.user_name ? `, ${currentUser?.name || currentUser?.user_name}` : ""}. Choose your organization.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {userTenants.map(t => (<Button key={t.id} variant="outline" className="w-full justify-start gap-3 h-12" onClick={() => handleSelect(t.id)}>

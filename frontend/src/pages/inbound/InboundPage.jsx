@@ -22,6 +22,7 @@ import {
   updateGrnLines,
 } from "@/services/api";
 import CreateASN from "./CreateASN";
+import { canTransition, canCancelDocument, canCreateInbound } from "@/services/rbac";
 import CreateGRN from "./CreateGRN";
 
 const roleAliases = {
@@ -83,33 +84,11 @@ const inboundStatusFilters = new Set([
   "cancelled",
 ]);
 
-const transitionPermissions = {
-  asn: {
-    submit: ["warehousemanager", "storekeeper"],
-    mark_in_transit: ["warehousemanager"],
-    mark_arrived: ["warehousemanager"],
-    close: ["warehousemanager"],
-  },
-  grn: {
-    start_receiving: ["warehousemanager", "storekeeper"],
-    complete: ["warehousemanager", "storekeeper"],
-    post: ["warehousemanager"],
-  },
-};
-
-const cancelPermissions = ["warehousemanager", "superadmin", "hqadmin", "storemanager"];
-
 function normalizeRole(roleId) {
   return roleAliases[String(roleId || "readonly").toLowerCase()] || "readonly";
 }
 
-function canTransition(roleId, entityType, action) {
-  return (transitionPermissions[entityType]?.[action] || []).includes(roleId);
-}
-
-function canCancelRole(roleId) {
-  return cancelPermissions.includes(roleId);
-}
+function canCancelRole(roleId) { return canCancelDocument(roleId); }
 
 function toStepperSteps(currentStatus, flow) {
   if (currentStatus === "cancelled") {
@@ -524,9 +503,9 @@ const performCancellation = async (reason) => {
                 >
                   Refresh
                 </Button>
-                <Button size="sm" onClick={() => setShowCreateAsn(true)}>
-                  Create ASN
-                </Button>
+                {canCreateInbound(roleId) && (
+                  <Button size="sm" onClick={() => setShowCreateAsn(true)}>Create ASN</Button>
+                )}
               </div>
             }
           />
@@ -595,9 +574,9 @@ const performCancellation = async (reason) => {
                 >
                   Refresh
                 </Button>
-                <Button size="sm" onClick={() => setShowCreateGrn(true)}>
-                  Create GRN
-                </Button>
+                {canCreateInbound(roleId) && (
+                  <Button size="sm" onClick={() => setShowCreateGrn(true)}>Create GRN</Button>
+                )}
               </div>
             }
           />

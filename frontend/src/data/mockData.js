@@ -18,7 +18,7 @@ const db = {
     email: "sarah@acme.com",   
     role_id: "warehousemanager",
     tenant_id: "TNT000001",
-    warehouse_ids: ["WH000001"],
+    warehouse_ids: ["WH000001", "WH000002"],
     is_active: true,
     lastLogin: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   },

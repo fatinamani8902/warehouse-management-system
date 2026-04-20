@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { can } from "@/services/rbac";
 import {
   fetchLovGroups,
   createLovGroup,
@@ -28,6 +29,9 @@ const LOVMaintenancePage = () => {
   const auth = useAuth();
   const { toast } = useToast();
   const session = useMemo(() => toSessionContext(auth), [auth]);
+  const userRole = auth.currentUser?.role || "";
+  const canEditLov = can(userRole, "lov", "edit");
+  const canDeleteLov = can(userRole, "lov", "delete");
 
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -192,7 +196,7 @@ const LOVMaintenancePage = () => {
               <Button variant="outline" className="h-9" onClick={() => setSearch("")}>Clear</Button>
             )}
             <Button variant="outline" className="h-9" onClick={loadGroups} disabled={loading}>Refresh</Button>
-            <Button className="h-9" onClick={() => { setGroupForm({ id: "", name: "", usedIn: [] }); setGroupFormError(""); setShowAddGroup(true); }}>
+            <Button className="h-9" disabled={!canEditLov} onClick={() => { setGroupForm({ id: "", name: "", usedIn: [] }); setGroupFormError(""); setShowAddGroup(true); }}>
               + Add Group
             </Button>
           </div>

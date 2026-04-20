@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { canEditUsers, canDeleteUsers } from "@/services/rbac";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import { Card, CardContent } from "@/components/ui/card";

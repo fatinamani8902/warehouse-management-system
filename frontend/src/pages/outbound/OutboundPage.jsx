@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { fetchOrders, releaseOrder, toSessionContext } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { canCreateOutbound, canReleaseOutbound, canCancelOutbound } from "@/services/rbac";
 
 const SKU_OPTIONS = [
   { sku_id: "SKU000001", description: "Industrial Bearing 6205" },
@@ -74,6 +75,10 @@ const initialFilters = { search: "", status: "" };
 export default function OutboundPage() {
   const auth = useAuth();
   const session = useMemo(() => toSessionContext(auth), [auth]);
+  const userRole = auth.currentUser?.role || "";
+  const canCreate = canCreateOutbound(userRole);
+  const canRelease = canReleaseOutbound(userRole);
+  const canCancel = canCancelOutbound(userRole);
 
   const [orders, setOrders] = useState([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
@@ -226,7 +231,9 @@ export default function OutboundPage() {
             </Select>
             <Button variant="outline" className="h-9" onClick={() => { setFilters(initialFilters); setPage(1); }}>Clear</Button>
             <Button variant="outline" className="h-9" onClick={loadOrders} disabled={loading}>Refresh</Button>
-            <Button className="h-9" onClick={() => setShowCreateOrder(true)}>Create Order</Button>
+            {canCreate && (
+              <Button className="h-9" onClick={() => setShowCreateOrder(true)}>Create Order</Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -359,29 +366,23 @@ export default function OutboundPage() {
             </div>
 
             {/* Action buttons */}
-            {selectedOrder.status === "draft" && (
+            {selectedOrder.status === "draft" && (canRelease || canCancel) && (
               <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                <Button
-                  size="sm"
-                  disabled={!selectedOrder.lines_count}
-                  onClick={() => handleRelease(selectedOrder.order_id)}
-                >
-                  Release Order
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => { setSkuForm({ sku_id: "", qty: "" }); setSkuError(""); setShowAddSku(true); }}
-                >
-                  + Add SKU Line
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => { setCancelTarget(selectedOrder.order_id); setCancelReason(""); setCancelError(""); }}
-                >
-                  Cancel Order
-                </Button>
+                {canRelease && (
+                  <Button size="sm" disabled={!selectedOrder.lines_count} onClick={() => handleRelease(selectedOrder.order_id)}>
+                    Release Order
+                  </Button>
+                )}
+                {canRelease && (
+                  <Button size="sm" variant="outline" onClick={() => { setSkuForm({ sku_id: "", qty: "" }); setSkuError(""); setShowAddSku(true); }}>
+                    + Add SKU Line
+                  </Button>
+                )}
+                {canCancel && (
+                  <Button size="sm" variant="destructive" onClick={() => { setCancelTarget(selectedOrder.order_id); setCancelReason(""); setCancelError(""); }}>
+                    Cancel Order
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>

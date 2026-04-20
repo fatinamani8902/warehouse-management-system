@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
+import { canCreateReturn, canCancelReturn, canCreateRma } from "@/services/rbac";
 import { useToast } from "@/hooks/use-toast";
 import {
   cancelReturn,
@@ -216,7 +217,7 @@ const ReturnsPage = () => {
     [roleId],
   );
   const canCreateRma = useMemo(
-    () => ["warehousemanager", "storekeeper"].includes(roleId),
+    () => ["warehousemanager"].includes(roleId),
     [roleId],
   );
   const canCancelReturnRole = useMemo(() => roleId === "warehousemanager", [roleId]);
@@ -520,11 +521,13 @@ const ReturnsPage = () => {
     }
   };
 
+  const canProcessRma = useMemo(() => ["warehousemanager"].includes(roleId), [roleId]);
+
   const renderRmaActions = (rmaRecord) => {
     const actions = [];
     const transition = rmaStatusTransitions[rmaRecord.status];
 
-    if (transition) {
+    if (transition && canProcessRma) {
       const busyKey = `rma-transition-${rmaRecord.rma_id}`;
       actions.push(
         <Button

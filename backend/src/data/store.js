@@ -18,7 +18,7 @@ const db = {
     email: "sarah@acme.com",   
     role_id: "storemanager",
     tenant_id: "TNT000001",
-    warehouse_ids: ["WH000001"],
+    warehouse_ids: ["WH000001", "WH000002"],
     is_active: true,
     lastLogin: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -61,6 +61,32 @@ const db = {
     warehouse_ids: ["WH000003"],
     is_active: true,
     lastLogin: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+],
+warehouses: [
+  {
+    warehouse_id: "WH000001",
+    warehouse_name: "Main Distribution Center",
+    city: "Chicago",
+    country: "US",
+    tenant_id: "TNT000001",
+    is_active: true,
+  },
+  {
+    warehouse_id: "WH000002",
+    warehouse_name: "Overflow Warehouse",
+    city: "Chicago",
+    country: "US",
+    tenant_id: "TNT000001",
+    is_active: true,
+  },
+  {
+    warehouse_id: "WH000003",
+    warehouse_name: "Tenant2 Warehouse",
+    city: "Kuala Lumpur",
+    country: "MY",
+    tenant_id: "TNT000002",
+    is_active: true,
   },
 ],
   suppliers: [
@@ -1483,6 +1509,7 @@ const sequenceCounters = {
   RMI: getMaxId(db.rma_items, "rma_item_id", "RMI"),
   AUD: getMaxId(db.audit_logs, "audit_id", "AUD"),
   TRC: getMaxId(db.trace_events, "event_id", "TRC"),
+  WH: getMaxId(db.warehouses, "warehouse_id", "WH"),
 };
 
 function nextPrefixedId(prefix, padLength = 6) {
@@ -1551,6 +1578,30 @@ function deleteSupplier(tenantId, supplierId) {
   }
 
   db.suppliers.splice(idx, 1);
+  return true;
+}
+
+function listWarehouses(tenantId) {
+  return clone(db.warehouses.filter(i => i.tenant_id === tenantId).sort((a,b) => a.warehouse_id.localeCompare(b.warehouse_id)));
+}
+function getWarehouse(tenantId, warehouseId) {
+  return db.warehouses.find(i => i.tenant_id === tenantId && i.warehouse_id === warehouseId) || null;
+}
+function createWarehouse(tenantId, { warehouseName, city, country }) {
+  const w = { warehouse_id: nextPrefixedId("WH"), warehouse_name: warehouseName, city: city || "", country: country || "", tenant_id: tenantId, is_active: true };
+  db.warehouses.push(w);
+  return clone(w);
+}
+function updateWarehouse(tenantId, warehouseId, payload) {
+  const idx = db.warehouses.findIndex(i => i.tenant_id === tenantId && i.warehouse_id === warehouseId);
+  if (idx < 0) return null;
+  db.warehouses[idx] = { ...db.warehouses[idx], warehouse_name: payload.warehouse_name ?? db.warehouses[idx].warehouse_name, city: payload.city ?? db.warehouses[idx].city, country: payload.country ?? db.warehouses[idx].country };
+  return clone(db.warehouses[idx]);
+}
+function deleteWarehouse(tenantId, warehouseId) {
+  const idx = db.warehouses.findIndex(i => i.tenant_id === tenantId && i.warehouse_id === warehouseId);
+  if (idx < 0) return false;
+  db.warehouses.splice(idx, 1);
   return true;
 }
 
@@ -4388,5 +4439,10 @@ export {
   createSku,
   updateSku,
   deleteSku,
+  listWarehouses,
+  getWarehouse,
+  createWarehouse,
+  updateWarehouse,
+  deleteWarehouse,
 };
 export { db };

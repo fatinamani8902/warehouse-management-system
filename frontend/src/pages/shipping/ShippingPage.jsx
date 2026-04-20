@@ -69,6 +69,25 @@ function normalizeRole(roleId) {
   return roleAliases[String(roleId || "readonly").toLowerCase()] || "readonly";
 }
 
+// Roles that can dispatch shipments
+const DISPATCH_ROLES = new Set(["superadmin", "hqadmin", "storemanager", "storeoperator"]);
+// Roles that can close shipments
+const CLOSE_ROLES = new Set(["superadmin", "hqadmin", "storemanager"]);
+// Roles that can cancel shipments
+const CANCEL_ROLES = new Set(["superadmin", "hqadmin", "storemanager"]);
+
+function canDispatchShipment(roleId) {
+  return DISPATCH_ROLES.has(normalizeRole(roleId));
+}
+
+function canCloseShipment(roleId) {
+  return CLOSE_ROLES.has(normalizeRole(roleId));
+}
+
+function canCancelShipment(roleId) {
+  return CANCEL_ROLES.has(normalizeRole(roleId));
+}
+
 function formatDateTime(value) {
   if (!value) return "-";
   const parsed = new Date(value);
@@ -263,7 +282,9 @@ const ShippingPage = () => {
     () => ["superadmin", "hqadmin", "storemanager", "storeoperator", "auditor", "readonly"].includes(roleId),
     [roleId],
   );
-  const canAct = useMemo(() => ACTION_ROLES.has(roleId), [roleId]);
+  const canDispatch = useMemo(() => canDispatchShipment(roleId), [roleId]);
+  const canClose = useMemo(() => canCloseShipment(roleId), [roleId]);
+  const canCancelShip = useMemo(() => canCancelShipment(roleId), [roleId]);
 
   const [filters, setFilters] = useState(initialFilters);
   const [page, setPage] = useState(1);
@@ -492,19 +513,19 @@ const ShippingPage = () => {
             </div>
 
             {/* Action buttons */}
-            {canAct && (DISPATCHABLE.has(selectedShipment.status) || selectedShipment.status === "dispatched" || ["pending", "packed", "carton_generated"].includes(selectedShipment.status)) && (
+            {(canDispatch || canClose || canCancelShip) && (
               <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                {DISPATCHABLE.has(selectedShipment.status) && (
+                {canDispatch && DISPATCHABLE.has(selectedShipment.status) && (
                   <Button size="sm" onClick={() => setDispatchTarget(selectedShipment)}>
                     Dispatch Shipment
                   </Button>
                 )}
-                {selectedShipment.status === "dispatched" && (
+                {canClose && selectedShipment.status === "dispatched" && (
                   <Button size="sm" variant="outline" onClick={() => setCloseTarget(selectedShipment)}>
                     Close Shipment
                   </Button>
                 )}
-                {["pending", "packed", "carton_generated"].includes(selectedShipment.status) && (
+                {canCancelShip && ["pending", "packed", "carton_generated"].includes(selectedShipment.status) && (
                   <Button size="sm" variant="destructive" onClick={() => setCancelTarget(selectedShipment)}>
                     Cancel Shipment
                   </Button>
