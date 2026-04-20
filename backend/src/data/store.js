@@ -2,66 +2,76 @@
 
 const db = {
   users: [
-    {
-      user_id: "USR000001",
-      user_name: "John Admin",
-      role_id: "superadmin",
-      tenant_id: "TNT000001",
-      warehouse_ids: ["WH000001", "WH000002"],
-      is_active: true,
-    },
-    {
-      user_id: "USR000002",
-      user_name: "Sarah Manager",
-      role_id: "storemanager",
-      tenant_id: "TNT000001",
-      warehouse_ids: ["WH000001"],
-      is_active: true,
-    },
-    {
-      user_id: "USR000003",
-      user_name: "Mike Operator",
-      role_id: "storeoperator",
-      tenant_id: "TNT000001",
-      warehouse_ids: ["WH000001"],
-      is_active: true,
-    },
-    {
-      user_id: "USR000004",
-      user_name: "Lisa Operator",
-      role_id: "storeoperator",
-      tenant_id: "TNT000001",
-      warehouse_ids: ["WH000001"],
-      is_active: true,
-    },
-    {
-      user_id: "USR000005",
-      user_name: "HQ Admin",
-      role_id: "hqadmin",
-      tenant_id: "TNT000001",
-      warehouse_ids: ["WH000001", "WH000002"],
-      is_active: true,
-    },
-    {
-      user_id: "USR100001",
-      user_name: "Tenant2 Manager",
-      role_id: "storemanager",
-      tenant_id: "TNT000002",
-      warehouse_ids: ["WH000003"],
-      is_active: true,
-    },
-  ],
+  {
+    user_id: "USR000001",
+    user_name: "John Admin",
+    email: "john@acme.com",
+    role_id: "superadmin",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001", "WH000002"],
+    is_active: true,
+    lastLogin: new Date().toISOString(),
+  },
+  {
+    user_id: "USR000002",
+    user_name: "Sarah Manager",
+    email: "sarah@acme.com",   
+    role_id: "storemanager",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001"],
+    is_active: true,
+    lastLogin: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    user_id: "USR000003",
+    user_name: "Mike Operator",
+    email: "mike@acme.com",
+    role_id: "storeoperator",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001"],
+    is_active: true,
+    lastLogin: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    user_id: "USR000004",
+    user_name: "Lisa Operator",
+    email: "lisa@acme.com",
+    role_id: "storeoperator",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001"],
+    is_active: false,
+    lastLogin: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    user_id: "USR000005",
+    user_name: "HQ Admin",
+    email: "hq@acme.com",
+    role_id: "hqadmin",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001", "WH000002"],
+    is_active: true,
+    lastLogin: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    user_id: "USR100001",
+    user_name: "Tenant2 Manager",
+    email: "manager@tenant2.com",
+    role_id: "storemanager",
+    tenant_id: "TNT000002",
+    warehouse_ids: ["WH000003"],
+    is_active: true,
+    lastLogin: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+],
   suppliers: [
-    { supplier_id: "SUP000001", supplier_name: "Parts Global", is_active: true, tenant_id: "TNT000001" },
-    { supplier_id: "SUP000002", supplier_name: "TechSupply Co", is_active: true, tenant_id: "TNT000001" },
-    { supplier_id: "SUP000003", supplier_name: "Northwind Components", is_active: true, tenant_id: "TNT000001" },
-    { supplier_id: "SUP000004", supplier_name: "GlobalTrade Supplier", is_active: true, tenant_id: "TNT000002" },
-  ],
+  { supplier_id: "SUP000001", supplier_name: "fatin", is_active: true, tenant_id: "TNT000001" },
+  { supplier_id: "SUP000002", supplier_name: "maisarah", is_active: true, tenant_id: "TNT000001" },
+],
   asns: [
     {
       asn_id: "ASN000001",
       supplier_id: "SUP000001",
-      supplier_name: "Parts Global",
+      supplier_name: "fatin",
       eta: "2026-02-12",
       status: "draft",
       lines_count: 3,
@@ -78,7 +88,7 @@ const db = {
     {
       asn_id: "ASN000002",
       supplier_id: "SUP000002",
-      supplier_name: "TechSupply Co",
+      supplier_name: "maisarah",
       eta: "2026-02-13",
       status: "pending",
       lines_count: 2,
@@ -110,71 +120,117 @@ const db = {
       cancelled_at: null,
     },
   ],
-  grns: [
-    {
-      grn_id: "GRN000142",
-      asn_id: null,
-      supplier_id: "SUP000002",
-      supplier_name: "TechSupply Co",
-      received_date: "2026-02-08",
-      status: "draft",
-      notes: "Direct receipt",
-      tenant_id: "TNT000001",
-      warehouse_id: "WH000001",
-      created_by: "USR000003",
-      created_at: "2026-02-08T10:00:00.000Z",
-      updated_at: "2026-02-08T10:00:00.000Z",
-      cancellation_reason: null,
-      cancelled_by: null,
-      cancelled_at: null,
-      lines: [
-        { line_no: 1, sku_id: "SKU000002", expected_qty: 10, received_qty: 10 },
-      ],
-    },
-    {
-      grn_id: "GRN000143",
-      asn_id: "ASN000002",
-      supplier_id: "SUP000002",
-      supplier_name: "TechSupply Co",
-      received_date: "2026-02-09",
-      status: "receiving",
-      notes: "Receiving from ASN000002",
-      tenant_id: "TNT000001",
-      warehouse_id: "WH000001",
-      created_by: "USR000003",
-      created_at: "2026-02-09T09:15:00.000Z",
-      updated_at: "2026-02-09T09:15:00.000Z",
-      cancellation_reason: null,
-      cancelled_by: null,
-      cancelled_at: null,
-      lines: [
-        { line_no: 1, sku_id: "SKU000001", expected_qty: 500, received_qty: 500 },
-        { line_no: 2, sku_id: "SKU000004", expected_qty: 200, received_qty: 200 },
-      ],
-    },
-    {
-      grn_id: "GRN000144",
-      asn_id: "ASN000003",
-      supplier_id: "SUP000003",
-      supplier_name: "Northwind Components",
-      received_date: "2026-02-09",
-      status: "completed",
-      notes: "Completed and ready to post",
-      tenant_id: "TNT000001",
-      warehouse_id: "WH000001",
-      created_by: "USR000002",
-      created_at: "2026-02-09T10:00:00.000Z",
-      updated_at: "2026-02-09T11:00:00.000Z",
-      cancellation_reason: null,
-      cancelled_by: null,
-      cancelled_at: null,
-      lines: [
-        { line_no: 1, sku_id: "SKU000003", expected_qty: 30, received_qty: 30 },
-      ],
-    },
-  ],
+ grns: [
+  {
+    grn_id: "GRN000001",
+    asn_id: null,
+    supplier_id: "SUP000001",
+    supplier_name: "fatin",
+    received_date: "2026-02-08",
+    status: "draft",
+    notes: "Direct receipt",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    created_by: "USR000003",
+    created_at: "2026-02-08T10:00:00.000Z",
+    updated_at: "2026-02-08T10:00:00.000Z",
+    cancellation_reason: null,
+    cancelled_by: null,
+    cancelled_at: null,
+    lines: [
+      { line_no: 1, sku_id: "SKU000002", expected_qty: 10, received_qty: 10 },
+    ],
+  },
 
-  orders: [],
+  {
+    grn_id: "GRN000002",
+    asn_id: "ASN000002",
+    supplier_id: "SUP000002",
+    supplier_name: "maisarah",
+    received_date: "2026-02-09",
+    status: "receiving",
+    notes: "Receiving from ASN000002",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    created_by: "USR000003",
+    created_at: "2026-02-09T09:15:00.000Z",
+    updated_at: "2026-02-09T09:15:00.000Z",
+    cancellation_reason: null,
+    cancelled_by: null,
+    cancelled_at: null,
+    lines: [
+      { line_no: 1, sku_id: "SKU000001", expected_qty: 500, received_qty: 500 },
+      { line_no: 2, sku_id: "SKU000004", expected_qty: 200, received_qty: 200 },
+    ],
+  },
+
+  {
+    grn_id: "GRN000003",
+    asn_id: "ASN000003",
+    supplier_id: "SUP000003",
+    supplier_name: "Northwind Components",
+    received_date: "2026-02-09",
+    status: "completed",
+    notes: "Completed and ready to post",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    created_by: "USR000002",
+    created_at: "2026-02-09T10:00:00.000Z",
+    updated_at: "2026-02-09T11:00:00.000Z",
+    cancellation_reason: null,
+    cancelled_by: null,
+    cancelled_at: null,
+    lines: [
+      { line_no: 1, sku_id: "SKU000003", expected_qty: 30, received_qty: 30 },
+    ],
+  },
+],
+
+  orders: [
+  {
+    order_id: "ORD0001",
+    tenant_id: "TNT000001",
+    customer_name: "RetailMax",
+    notes: "Urgent delivery",
+    status: "draft",
+    lines: [
+      { sku_id: "SKU000001", ordered_qty: 10, picked_qty: 0 },
+      { sku_id: "SKU000002", ordered_qty: 5, picked_qty: 0 },
+    ],
+    lines_count: 2,
+    created_at: "2026-02-09T08:00:00.000Z",
+    created_by: "USR000001",
+    cancellation_reason: null,
+  },
+  {
+    order_id: "ORD0002",
+    tenant_id: "TNT000001",
+    customer_name: "BuildRight Co",
+    notes: "",
+    status: "released",
+    lines: [
+      { sku_id: "SKU000003", ordered_qty: 20, picked_qty: 0 },
+    ],
+    lines_count: 1,
+    created_at: "2026-02-09T09:00:00.000Z",
+    created_by: "USR000001",
+    cancellation_reason: null,
+  },
+  {
+    order_id: "ORD0003",
+    tenant_id: "TNT000001",
+    customer_name: "Northline Stores",
+    notes: "Handle with care",
+    status: "cancelled",
+    lines: [
+      { sku_id: "SKU000004", ordered_qty: 15, picked_qty: 0 },
+    ],
+    lines_count: 1,
+    created_at: "2026-02-08T10:00:00.000Z",
+    created_by: "USR000001",
+    cancellation_reason: "Customer cancelled order",
+  },
+  ],
 
   skus: [
     {
@@ -221,14 +277,62 @@ const db = {
     { zone_id: "ZN006", zone_name: "Quarantine", zone_type: "quarantine", tenant_id: "TNT000001", warehouse_id: "WH000001" },
     { zone_id: "ZN901", zone_name: "Tenant2 Storage", zone_type: "storage", tenant_id: "TNT000002", warehouse_id: "WH000003" },
   ],
-  inventory_locations: [
-    { location_id: "LOC000001", location_code: "A-01-001", zone_id: "ZN002", tenant_id: "TNT000001", warehouse_id: "WH000001" },
-    { location_id: "LOC000002", location_code: "A-01-002", zone_id: "ZN002", tenant_id: "TNT000001", warehouse_id: "WH000001" },
-    { location_id: "LOC000003", location_code: "B-02-001", zone_id: "ZN003", tenant_id: "TNT000001", warehouse_id: "WH000001" },
-    { location_id: "LOC000004", location_code: "C-01-001", zone_id: "ZN003", tenant_id: "TNT000001", warehouse_id: "WH000001" },
-    { location_id: "LOC000006", location_code: "Q-01-001", zone_id: "ZN006", tenant_id: "TNT000001", warehouse_id: "WH000001" },
-    { location_id: "LOC100001", location_code: "C-01-001", zone_id: "ZN901", tenant_id: "TNT000002", warehouse_id: "WH000003" },
-  ],
+ inventory_locations: [
+  {
+    location_id: "LOC000001",
+    location_code: "A-01-001",
+    zone_id: "ZN002",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    capacity: 200,
+    used_qty: 0
+  },
+  {
+    location_id: "LOC000002",
+    location_code: "A-01-002",
+    zone_id: "ZN002",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    capacity: 200,
+    used_qty: 0
+  },
+  {
+    location_id: "LOC000003",
+    location_code: "B-02-001",
+    zone_id: "ZN003",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    capacity: 300,
+    used_qty: 0
+  },
+  {
+    location_id: "LOC000004",
+    location_code: "C-01-001",
+    zone_id: "ZN003",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    capacity: 300,
+    used_qty: 0
+  },
+  {
+    location_id: "LOC000006",
+    location_code: "Q-01-001",
+    zone_id: "ZN006",
+    tenant_id: "TNT000001",
+    warehouse_id: "WH000001",
+    capacity: 100,
+    used_qty: 0
+  },
+  {
+    location_id: "LOC100001",
+    location_code: "C-01-001",
+    zone_id: "ZN901",
+    tenant_id: "TNT000002",
+    warehouse_id: "WH000003",
+    capacity: 300,
+    used_qty: 0
+  }
+],
   inventory_reason_codes: [
     { reason_code: "DAMAGED", reason_name: "Damaged", tenant_id: "TNT000001" },
     { reason_code: "MISCOUNTED", reason_name: "Miscounted", tenant_id: "TNT000001" },
@@ -519,6 +623,71 @@ const db = {
   ],
   adjustment_requests: [
     {
+      adj_id: "ADJ000001",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      status: "DRAFT",
+      sku_id: "SKU000001",
+      location_id: "LOC000001",
+      qty_delta: -10,
+      reason_code: "MISCOUNTED",
+      requested_by: "USR000003",
+      requested_at: "2026-04-15T08:00:00.000Z",
+      approved_by: null,
+      approved_at: null,
+      approval_note: null,
+      cancellation_reason: null,
+    },
+    {
+      adj_id: "ADJ000002",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      status: "SUBMITTED",
+      sku_id: "SKU000002",
+      location_id: "LOC000002",
+      qty_delta: -5,
+      reason_code: "DAMAGED",
+      requested_by: "USR000003",
+      requested_at: "2026-04-14T09:30:00.000Z",
+      approved_by: null,
+      approved_at: null,
+      approval_note: null,
+      cancellation_reason: null,
+    },
+    {
+      adj_id: "ADJ000003",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      status: "APPROVED",
+      sku_id: "SKU000003",
+      location_id: "LOC000003",
+      qty_delta: 20,
+      reason_code: "CYCLE_VARIANCE",
+      requested_by: "USR000002",
+      requested_at: "2026-04-10T10:00:00.000Z",
+      approved_by: "USR000001",
+      approved_at: "2026-04-10T11:00:00.000Z",
+      approval_note: "Variance confirmed after recount.",
+      cancellation_reason: null,
+    },
+    {
+      adj_id: "ADJ000004",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      status: "REJECTED",
+      sku_id: "SKU000004",
+      location_id: "LOC000001",
+      qty_delta: -50,
+      reason_code: "SYSTEM_ERROR",
+      requested_by: "USR000003",
+      requested_at: "2026-04-08T14:00:00.000Z",
+      approved_by: "USR000001",
+      approved_at: "2026-04-08T15:30:00.000Z",
+      approval_note: null,
+      cancellation_reason: null,
+      rejection_reason: "Jumlah terlalu besar, perlu verifikasi fizikal semula.",
+    },
+    {
       adj_id: "ADJ000005",
       tenant_id: "TNT000001",
       warehouse_id: "WH000001",
@@ -531,7 +700,7 @@ const db = {
       requested_at: "2026-02-07T10:00:00.000Z",
       approved_by: "USR000001",
       approved_at: "2026-02-07T10:10:00.000Z",
-      approval_note: "Approved quality hold stock",
+      approval_note: "Approved quality hold stock.",
       cancellation_reason: null,
     },
     {
@@ -550,6 +719,22 @@ const db = {
       approval_note: null,
       cancellation_reason: null,
     },
+    {
+      adj_id: "ADJ000007",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      status: "CANCELLED",
+      sku_id: "SKU000001",
+      location_id: "LOC000002",
+      qty_delta: 15,
+      reason_code: "MISCOUNTED",
+      requested_by: "USR000003",
+      requested_at: "2026-04-01T08:00:00.000Z",
+      approved_by: null,
+      approved_at: null,
+      approval_note: null,
+      cancellation_reason: "Request dibuat silap, SKU tidak betul.",
+    },
   ],
   putaway_tasks: [
     {
@@ -563,10 +748,10 @@ const db = {
       suggested_bin: "A-01-001",
       actual_bin_code: null,
       priority: "high",
-      status: "pending",
-      assigned_to_user_id: null,
-      assigned_to_user_name: null,
-      started_at: null,
+      status: "in_progress",
+      assigned_to_user_id: "USR000003",
+      assigned_to_user_name: "Mike Operator",
+      started_at: "2026-02-09T10:00:00.000Z",
       completed_at: null,
       device_type: null,
       scan_method: null,
@@ -657,7 +842,32 @@ const db = {
       updated_by: "USR000003",
     },
     {
-      task_id: "PUT000310",
+      task_id: "PUT000214",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      grn_id: "GRN000145",
+      sku_id: "SKU000005",
+      qty: 60,
+      source_location: "DOCK-3",
+      suggested_bin: "C-01-001",
+      actual_bin_code: null,
+      priority: "low",
+      status: "pending",
+      assigned_to_user_id: null,
+      assigned_to_user_name: null,
+      started_at: null,
+      completed_at: null,
+      device_type: null,
+      scan_method: null,
+      epc_expected_count: null,
+      epc_confirmed_count: null,
+      validation_result: null,
+      exception_reason: null,
+      created_at: "2026-04-14T08:00:00.000Z",
+      updated_at: "2026-04-14T08:00:00.000Z",
+      updated_by: "USR000001",
+    },
+    {
       tenant_id: "TNT000002",
       warehouse_id: "WH000003",
       grn_id: "GRN100001",
@@ -838,6 +1048,23 @@ const db = {
       updated_at: "2026-02-08T09:45:00.000Z",
       updated_by: "USR100001",
     },
+    // Dalam db.pack_orders array, tambah:
+    {
+      pack_id: "PAK000035",
+      pick_list_id: "PCK000076", // PCK000076 status completed ✅
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      carton_id: null,
+      packaging_type: null,
+      weight_kg: null,
+      status: "draft",
+      label_generated_at: null,
+      packed_at: null,
+      created_at: "2026-02-09T13:00:00.000Z",
+      created_by: "USR000002",
+      updated_at: "2026-02-09T13:00:00.000Z",
+      updated_by: "USR000002",
+    },
   ],
   lov_packaging_types: [
     { value: "standard_box", label: "Standard Box", tenant_id: "TNT000001", is_active: true },
@@ -997,7 +1224,34 @@ const db = {
       reason_code: "defective",
     },
   ],
-  audit_logs: [],
+  audit_logs: [
+    {
+    audit_id: "AUD000001",
+    tenant_id: "TNT000001",
+    user_id: "USR000001",
+    entity_type: "asn",
+    entity_id: "ASN000001",
+    action: "create",
+    from_status: null,
+    to_status: "draft",
+    message: "ASN created",
+    timestamp: new Date().toISOString(),
+    source: "PORTAL",
+  },
+  {
+    audit_id: "AUD000002",
+    tenant_id: "TNT000001",
+    user_id: "USR000002",
+    entity_type: "grn",
+    entity_id: "GRN000001",
+    action: "cancel",
+    from_status: "receiving",
+    to_status: "cancelled",
+    message: "GRN cancelled — goods rejected",
+    timestamp: new Date(Date.now() - 3600000).toISOString(),
+    source: "PORTAL",
+  },
+  ],
   trace_events: [
     {
       event_id: "TRC000001",
@@ -1380,6 +1634,43 @@ function normalizeLines(lines) {
   }));
 }
 
+function generatePutawayTasks(grn) {
+
+  for (const line of grn.lines) {
+
+    const location = db.inventory_locations.find(
+      (loc) =>
+        loc.tenant_id === grn.tenant_id &&
+        loc.warehouse_id === grn.warehouse_id &&
+        Number(loc.used_qty || 0) < Number(loc.capacity || 0)
+    );
+
+    const task = {
+      task_id: nextPrefixedId("PUT"),
+      tenant_id: grn.tenant_id,
+      warehouse_id: grn.warehouse_id,
+      grn_id: grn.grn_id,
+      sku_id: line.sku_id,
+      qty: line.received_qty,
+      source_location: "DOCK-1",
+      suggested_bin: location ? location.location_code : null,
+      actual_bin_code: null,
+      priority: "medium",
+      status: "pending",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      updated_by: grn.created_by
+    };
+
+    db.putaway_tasks.push(task);
+
+    if (location) {
+      location.used_qty =
+        Number(location.used_qty || 0) + Number(line.received_qty || 0);
+    }
+
+  }
+}
 function createGrn({ tenantId, warehouseId, userId, asnId, supplierId, receivedDate, notes, lines }) {
   let resolvedSupplierId = supplierId;
   let resolvedSupplierName = "";
@@ -1427,6 +1718,7 @@ function createGrn({ tenantId, warehouseId, userId, asnId, supplierId, receivedD
   };
 
   db.grns.push(grn);
+  generatePutawayTasks(grn);
   return { data: clone(grn) };
 }
 
@@ -1661,7 +1953,7 @@ function assignPutawayTask({
       ...current,
       assigned_to_user_id: assignee.user_id,
       assigned_to_user_name: assignee.user_name,
-      status: current.status === "pending" ? "in_progress" : current.status,
+      status: ["pending", "exception"].includes(current.status) ? "in_progress" : current.status,
       started_at: current.started_at || now,
       updated_at: now,
       updated_by: actorUserId,
@@ -1779,6 +2071,54 @@ function markPutawayTaskException({
     eventType: "exception",
     eventPayload: {
       reason,
+    },
+    createdBy: actorUserId,
+    createdAt: now,
+  });
+
+  return { data: updated };
+}
+
+function completePutawayTask({
+  tenantId,
+  taskId,
+  actualBinCode,
+  actorUserId,
+  warehouseId = null,
+}) {
+  const now = new Date().toISOString();
+
+  const current = getPutawayTask(tenantId, taskId, warehouseId);
+  if (!current) return { error: "Task not found" };
+  if (current.status !== "in_progress") {
+    return { error: `Cannot complete task with status '${current.status}'. Task must be in_progress.` };
+  }
+
+  const updated = updatePutawayTask(
+    tenantId,
+    taskId,
+    (task) => ({
+      ...task,
+      status: "completed",
+      actual_bin_code: actualBinCode,
+      completed_at: now,
+      updated_at: now,
+      updated_by: actorUserId,
+      validation_result: actualBinCode === task.suggested_bin ? "passed" : "bin_mismatch",
+    }),
+    warehouseId,
+  );
+
+  if (!updated) return { error: "Task not found" };
+
+  createPutawayTaskEvent({
+    tenantId,
+    taskId,
+    eventType: "completed",
+    eventPayload: {
+      actual_bin_code: actualBinCode,
+      suggested_bin: current.suggested_bin,
+      bin_matched: actualBinCode === current.suggested_bin,
     },
     createdBy: actorUserId,
     createdAt: now,
@@ -2166,11 +2506,12 @@ function generatePackingCartonLabel({
 
 function confirmPackingOrder({
   tenantId,
+  warehouseId,
   packId,
   weightKg,
+  packagingType,  // TAMBAH
   source = "PORTAL",
   userId,
-  warehouseId = null,
 }) {
   const normalizedSource = normalizeSearchValue(source);
   if (normalizedSource !== "portal") {
@@ -2200,6 +2541,7 @@ function confirmPackingOrder({
       ...current,
       carton_id: current.carton_id || nextPrefixedId("CTN"),
       weight_kg: parsedWeight,
+      packaging_type: packagingType || current.packaging_type,
       status: "packed",
       packed_at: now,
       updated_at: now,
@@ -3092,6 +3434,7 @@ function approveCountPlan({
       status: "APPROVED",
       approved_at: now,
       approved_by: approvedBy,
+      approval_reason_code: normalizedReasonCode,
       approval_note: approvalNote || null,
     }),
     warehouseId,
@@ -3892,6 +4235,73 @@ function addTraceEvent(entry) {
   return clone(traceEvent);
 }
 
+function listSkus(tenantId, { search = "", page = 1, pageSize = 10 } = {}) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const safePageSize = Math.max(1, Number(pageSize) || 10);
+  const searchValue = normalizeSearchValue(search);
+
+  const rows = db.skus
+    .filter((item) => {
+      if (!searchValue) return true;
+      return [item.sku_id, item.description, item.uom_id].some(
+        (field) => normalizeSearchValue(field).includes(searchValue)
+      );
+    })
+    .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
+
+  const total = rows.length;
+  const offset = (safePage - 1) * safePageSize;
+  const items = rows.slice(offset, offset + safePageSize);
+
+  return { items: clone(items), total, page: safePage, pageSize: safePageSize };
+}
+
+function getSkuById(skuId) {
+  return db.skus.find((item) => item.sku_id === skuId) || null;
+}
+
+function createSku({ skuId, description, uomId, epcValue }) {
+  if (!skuId || !description) {
+    return { error: "sku_id and description are required" };
+  }
+
+  const exists = db.skus.find((item) => item.sku_id === skuId);
+  if (exists) {
+    return { error: "SKU ID already exists" };
+  }
+
+  const sku = {
+    sku_id: skuId.trim().toUpperCase(),
+    description: description.trim(),
+    uom_id: uomId || "EA",
+    epc_value: epcValue || null,
+  };
+
+  db.skus.push(sku);
+  return { data: clone(sku) };
+}
+
+function updateSku(skuId, { description, uomId, epcValue }) {
+  const idx = db.skus.findIndex((item) => item.sku_id === skuId);
+  if (idx < 0) return null;
+
+  db.skus[idx] = {
+    ...db.skus[idx],
+    description: description ?? db.skus[idx].description,
+    uom_id: uomId ?? db.skus[idx].uom_id,
+    epc_value: epcValue ?? db.skus[idx].epc_value,
+  };
+
+  return clone(db.skus[idx]);
+}
+
+function deleteSku(skuId) {
+  const idx = db.skus.findIndex((item) => item.sku_id === skuId);
+  if (idx < 0) return false;
+  db.skus.splice(idx, 1);
+  return true;
+}
+
 export {
   addAuditLog,
   addCountEntry,
@@ -3955,6 +4365,7 @@ export {
   rejectAdjustmentRequest,
   rejectCountPlan,
   markPutawayTaskException,
+  completePutawayTask,
   submitAdjustmentRequest,
   submitCountPlan,
   hydrateCountPlan,
@@ -3972,5 +4383,10 @@ export {
   updateReturn,
   updateRma,
   updateSupplier,
+  listSkus,
+  getSkuById,
+  createSku,
+  updateSku,
+  deleteSku,
 };
 export { db };

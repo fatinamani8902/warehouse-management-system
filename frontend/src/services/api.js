@@ -2,10 +2,7 @@
 
 function toSessionContext(authState) {
   return {
-    tenant_id:
-      authState?.currentTenantId ||
-      authState?.tenant_id ||
-      "TEN001",
+    tenant_id: authState?.currentTenantId || authState?.tenant_id || "TNT000001",
     warehouse_id: authState?.currentWarehouseId || "WH001",
     user_id: authState?.currentUser?.id || "USER001",
     role_id: authState?.currentUser?.role || "warehousemanager",
@@ -34,9 +31,7 @@ async function apiRequest(path, { method = "GET", body, session, signal } = {}) 
     signal,
   });
 
-  if (response.status === 204) {
-    return null;
-  }
+  if (response.status === 204) return null;
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
@@ -47,34 +42,122 @@ async function apiRequest(path, { method = "GET", body, session, signal } = {}) 
   return data;
 }
 
+function toQueryString(params) {
+  const query = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    query.set(key, String(value));
+  });
+  const encoded = query.toString();
+  return encoded ? `?${encoded}` : "";
+}
+
+// ─── SUPPLIERS ────────────────────────────────────────────────────────────────
+
 async function fetchSuppliers(session) {
   const response = await apiRequest("/master/suppliers", { session });
   return response.data;
 }
 
 async function createSupplier(session, payload) {
-  const response = await apiRequest("/master/suppliers", {
-    method: "POST",
-    session,
-    body: payload,
-  });
-
+  const response = await apiRequest("/master/suppliers", { method: "POST", session, body: payload });
   return response.data;
 }
 
 async function updateSupplier(session, supplierId, payload) {
-  const response = await apiRequest(`/master/suppliers/${supplierId}`, {
-    method: "PUT",
-    session,
-    body: payload,
-  });
-
+  const response = await apiRequest(`/master/suppliers/${supplierId}`, { method: "PUT", session, body: payload });
   return response.data;
 }
 
 function deleteSupplier(session, supplierId) {
   return apiRequest(`/master/suppliers/${supplierId}`, { method: "DELETE", session });
 }
+
+// ─── SKU MASTER ───────────────────────────────────────────────────────────────
+
+async function fetchSkus(session, params) {
+  const response = await apiRequest(`/master/skus${toQueryString(params)}`, { session });
+  return response;
+}
+
+async function createSkuApi(session, payload) {
+  const response = await apiRequest("/master/skus", { method: "POST", session, body: payload });
+  return response;
+}
+
+async function updateSkuApi(session, skuId, payload) {
+  const response = await apiRequest(`/master/skus/${skuId}`, { method: "PUT", session, body: payload });
+  return response;
+}
+
+function deleteSkuApi(session, skuId) {
+  return apiRequest(`/master/skus/${skuId}`, { method: "DELETE", session });
+}
+
+// ─── LOCATIONS ────────────────────────────────────────────────────────────────
+
+async function fetchLocations(session, params) {
+  const response = await apiRequest(`/master/locations${toQueryString(params)}`, { session });
+  return response;
+}
+
+async function createLocationApi(session, payload) {
+  const response = await apiRequest("/master/locations", { method: "POST", session, body: payload });
+  return response;
+}
+
+async function updateLocationApi(session, locationId, payload) {
+  const response = await apiRequest(`/master/locations/${locationId}`, { method: "PUT", session, body: payload });
+  return response;
+}
+
+function deleteLocationApi(session, locationId) {
+  return apiRequest(`/master/locations/${locationId}`, { method: "DELETE", session });
+}
+
+// ─── WAREHOUSES ───────────────────────────────────────────────────────────────
+
+async function fetchWarehouses(session, params) {
+  const response = await apiRequest(`/master/warehouses${toQueryString(params)}`, { session });
+  return response;
+}
+
+async function createWarehouseApi(session, payload) {
+  const response = await apiRequest("/master/warehouses", { method: "POST", session, body: payload });
+  return response;
+}
+
+async function updateWarehouseApi(session, warehouseId, payload) {
+  const response = await apiRequest(`/master/warehouses/${warehouseId}`, { method: "PUT", session, body: payload });
+  return response;
+}
+
+function deleteWarehouseApi(session, warehouseId) {
+  return apiRequest(`/master/warehouses/${warehouseId}`, { method: "DELETE", session });
+}
+
+// ─── CUSTOMERS ────────────────────────────────────────────────────────────────
+
+async function fetchCustomers(session, params) {
+  const response = await apiRequest(`/master/customers${toQueryString(params)}`, { session });
+  return response;
+}
+
+async function createCustomerApi(session, payload) {
+  const response = await apiRequest("/master/customers", { method: "POST", session, body: payload });
+  return response;
+}
+
+async function updateCustomerApi(session, customerId, payload) {
+  const response = await apiRequest(`/master/customers/${customerId}`, { method: "PUT", session, body: payload });
+  return response;
+}
+
+function deleteCustomerApi(session, customerId) {
+  return apiRequest(`/master/customers/${customerId}`, { method: "DELETE", session });
+}
+
+// ─── INBOUND ──────────────────────────────────────────────────────────────────
 
 async function fetchAsns(session, params) {
   const response = await apiRequest(`/inbound/asn${toQueryString(params)}`, { session });
@@ -86,11 +169,7 @@ function createAsn(session, payload) {
 }
 
 function transitionAsn(session, asnId, action, payload) {
-  return apiRequest(`/inbound/asn/${asnId}/${action}`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inbound/asn/${asnId}/${action}`, { method: "POST", session, body: payload });
 }
 
 function fetchGrns(session, params) {
@@ -98,30 +177,27 @@ function fetchGrns(session, params) {
 }
 
 async function createGrn(session, payload) {
-  const response = await apiRequest("/inbound/grn", {
-    method: "POST",
-    session,
-    body: payload,
-  });
-
+  const response = await apiRequest("/inbound/grn", { method: "POST", session, body: payload });
   return response.data;
 }
 
 function transitionGrn(session, grnId, action, payload) {
-  return apiRequest(`/inbound/grn/${grnId}/${action}`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inbound/grn/${grnId}/${action}`, { method: "POST", session, body: payload });
 }
 
 function cancelInboundDocument(session, payload) {
-  return apiRequest("/inbound/cancel", {
-    method: "POST",
+  return apiRequest("/inbound/cancel", { method: "POST", session, body: payload });
+}
+
+function updateGrnLines(session, grnId, lines) {
+  return apiRequest(`/inbound/grn/${grnId}/lines`, {
+    method: "PATCH",
     session,
-    body: payload,
+    body: { lines },
   });
 }
+
+// ─── TRACE ────────────────────────────────────────────────────────────────────
 
 function fetchTraceTimeline(session, params) {
   return apiRequest(`/trace/events${toQueryString(params)}`, { session });
@@ -134,6 +210,8 @@ function fetchTraceEvents(session, params) {
 function searchTraceEvents(session, params) {
   return apiRequest(`/trace/search${toQueryString(params)}`, { session });
 }
+
+// ─── RETURNS ──────────────────────────────────────────────────────────────────
 
 function fetchReturns(session) {
   return apiRequest("/returns", { session });
@@ -148,19 +226,11 @@ function createReturn(session, payload) {
 }
 
 function cancelReturn(session, returnId, payload) {
-  return apiRequest(`/returns/${returnId}/cancel`, {
-    method: "PATCH",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/returns/${returnId}/cancel`, { method: "PATCH", session, body: payload });
 }
 
 function createRmaFromReturn(session, returnId, payload) {
-  return apiRequest(`/returns/${returnId}/rma`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/returns/${returnId}/rma`, { method: "POST", session, body: payload });
 }
 
 function fetchRmas(session) {
@@ -172,24 +242,10 @@ function fetchRmaById(session, rmaId) {
 }
 
 function cancelRma(session, rmaId, payload) {
-  return apiRequest(`/rma/${rmaId}/cancel`, {
-    method: "PATCH",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/rma/${rmaId}/cancel`, { method: "PATCH", session, body: payload });
 }
 
-function toQueryString(params) {
-  const query = new URLSearchParams();
-  Object.entries(params || {}).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === "") {
-      return;
-    }
-    query.set(key, String(value));
-  });
-  const encoded = query.toString();
-  return encoded ? `?${encoded}` : "";
-}
+// ─── PUTAWAY ──────────────────────────────────────────────────────────────────
 
 function fetchPutawayTasks(session, params) {
   return apiRequest(`/putaway-tasks${toQueryString(params)}`, { session });
@@ -208,35 +264,33 @@ function fetchPutawayOperators(session) {
 }
 
 function assignPutawayTask(session, taskId, assignedToUserId) {
-  return apiRequest(`/putaway-tasks/${taskId}/assign`, {
-    method: "POST",
-    session,
-    body: { assignedToUserId },
-  });
+  return apiRequest(`/putaway-tasks/${taskId}/assign`, { method: "POST", session, body: { assignedToUserId } });
 }
 
 function recomputePutawayBin(session, taskId) {
-  return apiRequest(`/putaway-tasks/${taskId}/recompute-bin`, {
-    method: "POST",
-    session,
-  });
+  return apiRequest(`/putaway-tasks/${taskId}/recompute-bin`, { method: "POST", session });
 }
 
 function markPutawayTaskException(session, taskId, reason) {
-  return apiRequest(`/putaway-tasks/${taskId}/mark-exception`, {
-    method: "POST",
-    session,
-    body: { reason },
-  });
+  return apiRequest(`/putaway-tasks/${taskId}/mark-exception`, { method: "POST", session, body: { reason } });
 }
+
+function completePutawayTask(session, taskId, payload) {
+  return apiRequest(`/putaway-tasks/${taskId}/complete`, { method: "POST", session, body: payload });
+}
+
+// ─── PICKING ──────────────────────────────────────────────────────────────────
 
 function fetchPickLists(session, params) {
   return apiRequest(`/picking/pick-lists${toQueryString(params)}`, { session });
 }
 
-function fetchPickListById(session, pickListId) {
-  return apiRequest(`/picking/pick-lists/${pickListId}`, { session });
+async function fetchPickListById(session, pickListId) {
+  const res = await apiRequest(`/picking/pick-lists/${pickListId}`, { session });
+  return res?.data ?? null;
 }
+
+// ─── PACKING ──────────────────────────────────────────────────────────────────
 
 function fetchPackingOrders(session, params) {
   return apiRequest(`/packing/orders${toQueryString(params)}`, { session });
@@ -250,33 +304,17 @@ function fetchPackingOptions(session) {
   return apiRequest("/packing/options", { session });
 }
 
+function confirmPacking(session, packId, payload) {
+  return apiRequest(`/packing/orders/${packId}/confirm-pack`, { method: "POST", session, body: payload });
+}
+
+// ─── SHIPPING ─────────────────────────────────────────────────────────────────
+
 function fetchShipments(session, params) {
   return apiRequest(`/shipping${toQueryString(params)}`, { session });
 }
 
-function createPackingCarton(session, packId, payload) {
-  return apiRequest(`/packing/orders/${packId}/create-carton`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
-}
-
-function generatePackingLabel(session, packId, payload) {
-  return apiRequest(`/packing/orders/${packId}/generate-label`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
-}
-
-function confirmPacking(session, packId, payload) {
-  return apiRequest(`/packing/orders/${packId}/confirm-pack`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
-}
+// ─── INVENTORY ────────────────────────────────────────────────────────────────
 
 function fetchInventoryOptions(session) {
   return apiRequest("/inventory/options", { session });
@@ -299,50 +337,27 @@ function fetchCountPlanById(session, countId) {
 }
 
 function createCountPlan(session, payload) {
-  return apiRequest("/inventory/count-plans", {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest("/inventory/count-plans", { method: "POST", session, body: payload });
 }
 
 function addCountPlanEntry(session, countId, payload) {
-  return apiRequest(`/inventory/count-plans/${countId}/entries`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/count-plans/${countId}/entries`, { method: "POST", session, body: payload });
 }
 
 function submitCountPlan(session, countId) {
-  return apiRequest(`/inventory/count-plans/${countId}/submit`, {
-    method: "POST",
-    session,
-  });
+  return apiRequest(`/inventory/count-plans/${countId}/submit`, { method: "POST", session });
 }
 
 function approveCountPlan(session, countId, payload) {
-  return apiRequest(`/inventory/count-plans/${countId}/approve`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/count-plans/${countId}/approve`, { method: "POST", session, body: payload });
 }
 
 function rejectCountPlan(session, countId, payload) {
-  return apiRequest(`/inventory/count-plans/${countId}/reject`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/count-plans/${countId}/reject`, { method: "POST", session, body: payload });
 }
 
 function cancelCountPlan(session, countId, payload) {
-  return apiRequest(`/inventory/count-plans/${countId}/cancel`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/count-plans/${countId}/cancel`, { method: "POST", session, body: payload });
 }
 
 function fetchAdjustmentRequests(session, params) {
@@ -350,47 +365,26 @@ function fetchAdjustmentRequests(session, params) {
 }
 
 function createAdjustmentRequest(session, payload) {
-  return apiRequest("/inventory/adjustments", {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest("/inventory/adjustments", { method: "POST", session, body: payload });
 }
 
 function submitAdjustmentRequest(session, adjId) {
-  return apiRequest(`/inventory/adjustments/${adjId}/submit`, {
-    method: "POST",
-    session,
-  });
+  return apiRequest(`/inventory/adjustments/${adjId}/submit`, { method: "POST", session });
 }
 
 function approveAdjustmentRequest(session, adjId, payload) {
-  return apiRequest(`/inventory/adjustments/${adjId}/approve`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/adjustments/${adjId}/approve`, { method: "POST", session, body: payload });
 }
 
 function rejectAdjustmentRequest(session, adjId, payload) {
-  return apiRequest(`/inventory/adjustments/${adjId}/reject`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/adjustments/${adjId}/reject`, { method: "POST", session, body: payload });
 }
 
 function cancelAdjustmentRequest(session, adjId, payload) {
-  return apiRequest(`/inventory/adjustments/${adjId}/cancel`, {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/inventory/adjustments/${adjId}/cancel`, { method: "POST", session, body: payload });
 }
 
-/* -------------------------
-   OUTBOUND ORDERS
-------------------------- */
+// ─── OUTBOUND ORDERS ──────────────────────────────────────────────────────────
 
 function fetchOrders(session, params) {
   return apiRequest(`/outbound/orders${toQueryString(params)}`, { session });
@@ -401,96 +395,160 @@ function fetchOrderById(session, orderId) {
 }
 
 function createOrder(session, payload) {
-  return apiRequest("/outbound/orders", {
-    method: "POST",
-    session,
-    body: payload,
-  });
+  return apiRequest("/outbound/orders", { method: "POST", session, body: payload });
 }
 
 function updateOrder(session, orderId, payload) {
-  return apiRequest(`/outbound/orders/${orderId}`, {
-    method: "PUT",
-    session,
-    body: payload,
-  });
+  return apiRequest(`/outbound/orders/${orderId}`, { method: "PUT", session, body: payload });
 }
 
 function deleteOrder(session, orderId) {
-  return apiRequest(`/outbound/orders/${orderId}`, {
-    method: "DELETE",
-    session,
-  });
+  return apiRequest(`/outbound/orders/${orderId}`, { method: "DELETE", session });
 }
 
 function releaseOrder(session, orderId) {
-  return apiRequest(`/outbound/orders/${orderId}/release`, {
-    method: "POST",
-    session,
-  });
+  return apiRequest(`/outbound/orders/${orderId}/release`, { method: "POST", session });
 }
 
+// ─── LOV ──────────────────────────────────────────────────────────────────────
+
+function fetchLovGroups(session, params) {
+  return apiRequest(`/lov/groups${toQueryString(params)}`, { session });
+}
+
+function fetchLovGroupById(session, groupId) {
+  return apiRequest(`/lov/groups/${groupId}`, { session });
+}
+
+function createLovGroup(session, payload) {
+  return apiRequest("/lov/groups", { method: "POST", session, body: payload });
+}
+
+function addLovValue(session, groupId, value) {
+  return apiRequest(`/lov/groups/${groupId}/values`, { method: "POST", session, body: { value } });
+}
+
+function updateLovValue(session, groupId, valueIndex, value) {
+  return apiRequest(`/lov/groups/${groupId}/values/${valueIndex}`, { method: "PUT", session, body: { value } });
+}
+
+function deleteLovValue(session, groupId, valueIndex) {
+  return apiRequest(`/lov/groups/${groupId}/values/${valueIndex}`, { method: "DELETE", session });
+}
+
+// ─── AUDIT ────────────────────────────────────────────────────────────────────
+
+function fetchAuditOptions(session) {
+  return apiRequest("/audit/options", { session });
+}
+
+function fetchAuditLogs(session, params) {
+  return apiRequest(`/audit/logs${toQueryString(params)}`, { session });
+}
+
+// ─── EXPORTS ──────────────────────────────────────────────────────────────────
+
 export {
+  toSessionContext,
+  // Suppliers
+  fetchSuppliers,
+  createSupplier,
+  updateSupplier,
+  deleteSupplier,
+  // SKU
+  fetchSkus,
+  createSkuApi,
+  updateSkuApi,
+  deleteSkuApi,
+  // Locations
+  fetchLocations,
+  createLocationApi,
+  updateLocationApi,
+  deleteLocationApi,
+  // Warehouses
+  fetchWarehouses,
+  createWarehouseApi,
+  updateWarehouseApi,
+  deleteWarehouseApi,
+  // Customers
+  fetchCustomers,
+  createCustomerApi,
+  updateCustomerApi,
+  deleteCustomerApi,
+  // Inbound
+  fetchAsns,
+  createAsn,
+  transitionAsn,
+  fetchGrns,
+  createGrn,
+  updateGrnLines,
+  transitionGrn,
+  cancelInboundDocument,
+  // Trace
+  fetchTraceTimeline,
+  fetchTraceEvents,
+  searchTraceEvents,
+  // Returns
+  fetchReturns,
+  fetchReturnById,
+  createReturn,
+  cancelReturn,
+  createRmaFromReturn,
+  fetchRmas,
+  fetchRmaById,
+  cancelRma,
+  // Putaway
+  fetchPutawayTasks,
+  fetchPutawayTask,
+  fetchPutawayTaskHistory,
+  fetchPutawayOperators,
+  assignPutawayTask,
+  recomputePutawayBin,
+  markPutawayTaskException,
+  completePutawayTask,
+  // Picking
+  fetchPickLists,
+  fetchPickListById,
+  // Packing
+  fetchPackingOrders,
+  fetchPackingOrderById,
+  fetchPackingOptions,
+  confirmPacking,
+  // Shipping
+  fetchShipments,
+  // Inventory
+  fetchInventoryOptions,
+  fetchInventorySummary,
+  fetchInventoryTransactions,
+  fetchCountPlans,
+  fetchCountPlanById,
+  createCountPlan,
+  addCountPlanEntry,
+  submitCountPlan,
+  approveCountPlan,
+  rejectCountPlan,
+  cancelCountPlan,
+  fetchAdjustmentRequests,
+  createAdjustmentRequest,
+  submitAdjustmentRequest,
+  approveAdjustmentRequest,
+  rejectAdjustmentRequest,
+  cancelAdjustmentRequest,
+  // Outbound
   fetchOrders,
   fetchOrderById,
   createOrder,
   updateOrder,
   deleteOrder,
-  addCountPlanEntry,
-  approveAdjustmentRequest,
-  approveCountPlan,
-  assignPutawayTask,
-  cancelAdjustmentRequest,
-  cancelCountPlan,
-  cancelReturn,
-  cancelRma,
-  cancelInboundDocument,
-  createAdjustmentRequest,
-  createAsn,
-  createCountPlan,
-  createGrn,
-  createReturn,
-  createRmaFromReturn,
-  createSupplier,
-  deleteSupplier,
-  fetchAsns,
-  fetchAdjustmentRequests,
-  fetchCountPlanById,
-  fetchCountPlans,
-  fetchGrns,
-  fetchInventoryOptions,
-  fetchInventorySummary,
-  fetchInventoryTransactions,
-  fetchReturnById,
-  fetchReturns,
-  fetchPutawayOperators,
-  fetchPutawayTask,
-  fetchPutawayTaskHistory,
-  fetchPutawayTasks,
-  fetchPickLists,
-  fetchPickListById,
-  fetchPackingOrders,
-  fetchPackingOrderById,
-  fetchPackingOptions,
-  fetchShipments,
-  fetchRmaById,
-  fetchRmas,
-  fetchSuppliers,
-  fetchTraceTimeline,
-  fetchTraceEvents,
-  searchTraceEvents,
-  createPackingCarton,
-  generatePackingLabel,
-  confirmPacking,
-  markPutawayTaskException,
-  rejectAdjustmentRequest,
-  rejectCountPlan,
-  recomputePutawayBin,
-  releaseOrder, 
-  submitAdjustmentRequest,
-  submitCountPlan,
-  toSessionContext,
-  transitionAsn,
-  transitionGrn,
-  updateSupplier,
+  releaseOrder,
+  // LOV
+  fetchLovGroups,
+fetchLovGroupById,
+createLovGroup,
+addLovValue,
+updateLovValue,
+deleteLovValue,
+// Audit
+fetchAuditOptions,
+fetchAuditLogs,
 };

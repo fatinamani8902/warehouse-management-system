@@ -21,6 +21,7 @@ const transitionPermissions = {
 
 const rolePermissions = {
   superadmin: [
+    "audit.view",
     "returns.view",
     "returns.create",
     "returns.cancel",
@@ -55,6 +56,7 @@ const rolePermissions = {
     "shipping.view",
   ],
   hqadmin: [
+    "audit.view",
     "returns.view",
     "returns.create",
     "returns.cancel",
@@ -89,11 +91,13 @@ const rolePermissions = {
     "shipping.view",
   ],
   storemanager: [
+    "audit.view",
     "returns.view",
     "returns.create",
     "returns.cancel",
     "returns.create_rma",
     "rma.view",
+    "rma.cancel",
     "putaway.view",
     "putaway.assign",
     "putaway.mark_exception",

@@ -61,7 +61,7 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
       setSubmitting(true);
       const payload = {
         asn_id: asnId || null,
-        supplier_id: asnId ? undefined : supplierId,
+        supplier_id: supplierId,
         received_date: receivedDate,
         notes,
       };

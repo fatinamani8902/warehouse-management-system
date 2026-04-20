@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
   assignPutawayTask,
+  completePutawayTask,
   fetchPutawayOperators,
   fetchPutawayTask,
   fetchPutawayTaskHistory,
@@ -88,6 +89,7 @@ const PutawayPage = () => {
   const canAssign = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
   const canRecompute = useMemo(() => ["superadmin", "hqadmin"].includes(roleId), [roleId]);
   const canMarkException = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
+  const canCompleteTask = useMemo(() => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId), [roleId]);
   const canViewHistory = useMemo(
     () => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId),
     [roleId],
@@ -112,6 +114,10 @@ const PutawayPage = () => {
   const [exceptionOpen, setExceptionOpen] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [exceptionTouched, setExceptionTouched] = useState(false);
+
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [actualBin, setActualBin] = useState("");
+  const [completeTouched, setCompleteTouched] = useState(false);
 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyRows, setHistoryRows] = useState([]);
@@ -229,9 +235,15 @@ const PutawayPage = () => {
     }
   };
 
-  const openAssignModal = () => {
+  const openAssignModal = async () => {
     setAssignUserId(selectedTask?.assigned_to_user_id || "");
     setAssignOpen(true);
+    try {
+      const rows = await fetchPutawayOperators(session);
+      setOperators(Array.isArray(rows) ? rows : []);
+    } catch (_error) {
+      setOperators([]);
+    }
   };
 
   const submitAssign = async () => {
@@ -275,6 +287,37 @@ const PutawayPage = () => {
       const message = recomputeError.message || "Unable to recompute suggested bin";
       setError(message);
       toast({ title: "Recompute failed", description: message, variant: "destructive" });
+    } finally {
+      setActionKey("");
+    }
+  };
+
+  const openCompleteModal = () => {
+    setActualBin(selectedTask?.suggested_bin || "");
+    setCompleteTouched(false);
+    setCompleteOpen(true);
+  };
+
+  const submitComplete = async () => {
+    setCompleteTouched(true);
+    if (!selectedTask || !actualBin.trim()) return;
+
+    try {
+      setActionKey("complete");
+      setError("");
+      const response = await completePutawayTask(session, selectedTask.task_id, {
+        actual_bin_code: actualBin.trim(),
+      });
+      toast({
+        title: "Task completed",
+        description: response?.message || `Task ${selectedTask.task_id} marked as completed`,
+      });
+      setCompleteOpen(false);
+      await refreshData(selectedTask.task_id);
+    } catch (completeError) {
+      const message = completeError.message || "Unable to complete task";
+      setError(message);
+      toast({ title: "Complete failed", description: message, variant: "destructive" });
     } finally {
       setActionKey("");
     }
@@ -414,13 +457,12 @@ const PutawayPage = () => {
                   <th className="px-3 py-2 text-left">Status</th>
                   <th className="px-3 py-2 text-left">Assigned To</th>
                   <th className="px-3 py-2 text-left">Last Updated</th>
-                  <th className="px-3 py-2 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                       <span className="inline-flex items-center gap-2">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Loading putaway tasks...
@@ -431,7 +473,7 @@ const PutawayPage = () => {
 
                 {!loading && tasks.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-muted-foreground">
+                    <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                       No putaway tasks found.
                     </td>
                   </tr>
@@ -457,23 +499,21 @@ const PutawayPage = () => {
                         <StatusBadge status={task.status} />
                       </td>
                       <td className="px-3 py-2">{task.assigned_to_user_name || "Unassigned"}</td>
-                      <td className="px-3 py-2">{formatDateTime(task.updated_at)}</td>
                       <td className="px-3 py-2">
-                        {canViewHistory ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-7 text-[11px] px-2"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              openHistory(task.task_id);
-                            }}
-                          >
-                            View History
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-muted-foreground text-xs">{formatDateTime(task.updated_at)}</span>
+                          {canViewHistory && (
+                            <button
+                              className="text-xs text-blue-600 hover:underline text-left w-fit"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openHistory(task.task_id);
+                              }}
+                            >
+                              View History
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -524,6 +564,18 @@ const PutawayPage = () => {
             <CardTitle className="text-sm flex items-center gap-2">
               {selectedTask.task_id}
               <StatusBadge status={selectedTask.status} />
+              <StatusBadge status={selectedTask.priority} />
+              {canViewHistory && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto h-7 text-[11px] px-2"
+                  disabled={actionKey === "history"}
+                  onClick={() => openHistory(selectedTask.task_id)}
+                >
+                  View History
+                </Button>
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -533,7 +585,7 @@ const PutawayPage = () => {
                 <p>{selectedTask.sku_id}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Qty</p>
+                <p className="text-xs text-muted-foreground">Quantity</p>
                 <p>{selectedTask.qty}</p>
               </div>
               <div>
@@ -564,7 +616,7 @@ const PutawayPage = () => {
                 <div>
                   <p className="text-xs text-muted-foreground">Actual Bin</p>
                   <p className="inline-flex items-center gap-1">
-                    {(selectedTask.execution?.actual_bin || selectedTask.actual_bin_code || "-")}
+                    {selectedTask.execution?.actual_bin || selectedTask.actual_bin_code || "-"}
                     {selectedTaskHasBinMismatch && (
                       <span className="inline-flex items-center text-amber-600">
                         <AlertTriangle className="h-3.5 w-3.5" />
@@ -612,44 +664,44 @@ const PutawayPage = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {canAssign && (
+              {canAssign && ["pending", "in_progress", "exception"].includes(selectedTask.status) && (
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={Boolean(actionKey)}
+                  disabled={actionKey === "assign"}
                   onClick={openAssignModal}
                 >
                   Assign
                 </Button>
               )}
-              {canRecompute && (
+              {canRecompute && ["pending", "in_progress"].includes(selectedTask.status) && (
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={Boolean(actionKey)}
+                  disabled={actionKey === "recompute"}
                   onClick={submitRecompute}
                 >
                   {actionKey === "recompute" ? "Recomputing..." : "Recompute Suggested Bin"}
                 </Button>
               )}
-              {canMarkException && (
+              {canCompleteTask && selectedTask.status === "in_progress" && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={actionKey === "complete"}
+                  onClick={openCompleteModal}
+                >
+                  {actionKey === "complete" ? "Completing..." : "Complete Task"}
+                </Button>
+              )}
+              {canMarkException && ["pending", "in_progress"].includes(selectedTask.status) && (
                 <Button
                   variant="destructive"
                   size="sm"
-                  disabled={Boolean(actionKey)}
+                  disabled={actionKey === "exception"}
                   onClick={openExceptionModal}
                 >
                   Mark as Exception
-                </Button>
-              )}
-              {canViewHistory && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={Boolean(actionKey)}
-                  onClick={() => openHistory(selectedTask.task_id)}
-                >
-                  View History
                 </Button>
               )}
             </div>
@@ -691,6 +743,44 @@ const PutawayPage = () => {
             </Button>
             <Button onClick={submitAssign} disabled={!assignUserId || actionKey === "assign"}>
               {actionKey === "assign" ? "Assigning..." : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={completeOpen} onOpenChange={setCompleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Complete Putaway Task</DialogTitle>
+            <DialogDescription>
+              Confirm the actual bin where items were placed for task {selectedTask?.task_id || "-"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="actual-bin">Actual Bin</Label>
+            <Input
+              id="actual-bin"
+              value={actualBin}
+              onChange={(event) => setActualBin(event.target.value)}
+              onBlur={() => setCompleteTouched(true)}
+              placeholder={selectedTask?.suggested_bin || "e.g. A-01-001"}
+            />
+            {completeTouched && !actualBin.trim() && (
+              <p className="text-xs text-destructive">Actual bin is required.</p>
+            )}
+            {actualBin.trim() && selectedTask?.suggested_bin && actualBin.trim() !== selectedTask.suggested_bin && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Bin differs from suggested bin ({selectedTask.suggested_bin}). This will be flagged.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompleteOpen(false)} disabled={actionKey === "complete"}>
+              Cancel
+            </Button>
+            <Button onClick={submitComplete} disabled={!actualBin.trim() || actionKey === "complete"}>
+              {actionKey === "complete" ? "Completing..." : "Confirm Complete"}
             </Button>
           </DialogFooter>
         </DialogContent>

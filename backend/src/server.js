@@ -1,23 +1,18 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "./app.js";
-import outboundRoutes from "./routes/v1/outboundRoutes.js";
-import inventoryRoutes from "./routes/v1/inventoryRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
 function startServer(port = Number(process.env.PORT || 5000)) {
-
+  // createApp() already mounts ALL routes under /api/v1 via v1Routes.
+  // DO NOT register any routes here — doing so creates duplicate handlers.
   const app = createApp();
-
-  /* REGISTER OUTBOUND ROUTES */
-  app.use("/api/v1/outbound", outboundRoutes);
-  app.use("/api/v1/inventory", inventoryRoutes);
 
   return app.listen(port, () => {
     console.log(`Backend running on http://localhost:${port}`);
   });
-
 }
 
 const isDirectRun =
@@ -28,4 +23,4 @@ if (isDirectRun) {
   startServer();
 }
 
-export { createApp, startServer };
+export { startServer };

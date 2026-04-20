@@ -19,6 +19,7 @@ import {
   toSessionContext,
   transitionAsn,
   transitionGrn,
+  updateGrnLines,
 } from "@/services/api";
 import CreateASN from "./CreateASN";
 import CreateGRN from "./CreateGRN";
@@ -183,6 +184,8 @@ const InboundPage = () => {
   const [showCreateAsn, setShowCreateAsn] = useState(false);
   const [showCreateGrn, setShowCreateGrn] = useState(false);
   const [cancellationTarget, setCancellationTarget] = useState(null);
+  const [receivingQty, setReceivingQty] = useState({});
+  const [savingLines, setSavingLines] = useState(false);
 
   useEffect(() => {
     const parsed = parseInboundQuery(location.search);
@@ -360,10 +363,14 @@ const performCancellation = async (reason) => {
     runAsnTransition(record, action);
   };
 
-  const handleGrnAction = (record, action) => {
+  const handleGrnAction = async (record, action) => {
     if (action === "cancel") {
       setCancellationTarget({ entity: "grn", record });
       return;
+    }
+    // auto-save received quantities before finishing receiving
+    if (action === "complete" && record.status === "receiving") {
+      await handleSaveReceivedQty(record);
     }
     runGrnTransition(record, action);
   };
@@ -455,6 +462,40 @@ const performCancellation = async (reason) => {
     ? grns.find((row) => row.grn_id === selectedGrn.grn_id) || selectedGrn
     : null;
 
+  // reset receivingQty when switching GRN
+  useEffect(() => {
+    if (!selectedGrnDetails) return;
+    const initial = {};
+    (selectedGrnDetails.lines || []).forEach((line) => {
+      initial[line.line_no] = line.received_qty ?? 0;
+    });
+    setReceivingQty(initial);
+  }, [selectedGrnDetails?.grn_id]);
+
+  const handleSaveReceivedQty = async (grn) => {
+    try {
+      setSavingLines(true);
+      setError("");
+      const lines = (grn.lines || []).map((line) => ({
+        line_no: line.line_no,
+        received_qty: Number(receivingQty[line.line_no] ?? 0),
+      }));
+      const response = await updateGrnLines(session, grn.grn_id, lines);
+      const updated = response?.data;
+      if (updated) {
+        setGrns((current) => current.map((row) => (row.grn_id === updated.grn_id ? updated : row)));
+        setSelectedGrn(updated);
+      }
+      toast({ title: "Quantities saved", description: "Received quantities updated" });
+    } catch (err) {
+      const message = err.message || "Unable to save quantities";
+      setError(message);
+      toast({ title: "Save failed", description: message, variant: "destructive" });
+    } finally {
+      setSavingLines(false);
+    }
+  };
+
   return (
     <AppLayout>
       <Breadcrumbs items={[{ label: "Inbound" }]} />
@@ -503,24 +544,35 @@ const performCancellation = async (reason) => {
                   steps={toStepperSteps(selectedAsnDetails.status, ["draft", "pending", "in_transit", "arrived", "closed"])}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">Supplier</p>
-                    <p>{selectedAsnDetails.supplier_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">ETA</p>
-                    <p>{selectedAsnDetails.eta}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Lines</p>
-                    <p>{selectedAsnDetails.lines_count}</p>
-                  </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Supplier</p>
+                  <p>{selectedAsnDetails.supplier_name}</p>
                 </div>
-                {selectedAsnDetails.status === "cancelled" && (
-                  <p className="text-xs text-amber-700">This ASN is cancelled and cannot be changed.</p>
-                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">Created At</p>
+                  <p>{formatCreatedDate(selectedAsnDetails.created_at)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Created By</p>
+                  <p>{selectedAsnDetails.created_by || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">ETA</p>
+                  <p>{selectedAsnDetails.eta || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Lines</p>
+                  <p>{selectedAsnDetails.lines_count}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Notes</p>
+                  <p>{selectedAsnDetails.notes || "-"}</p>
+                </div>
+              </div>
                 {selectedAsnDetails.cancellation_reason && (
-                  <p className="text-xs text-muted-foreground">Reason: {selectedAsnDetails.cancellation_reason}</p>
+                  <p className="text-xs text-destructive">
+                    Cancellation Reason: {selectedAsnDetails.cancellation_reason}
+                  </p>
                 )}
                 <div>{renderActionButtons("asn", selectedAsnDetails)}</div>
               </CardContent>
@@ -563,26 +615,31 @@ const performCancellation = async (reason) => {
                   steps={toStepperSteps(selectedGrnDetails.status, ["draft", "receiving", "completed", "posted"])}
                 />
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground">ASN</p>
-                    <p>{selectedGrnDetails.asn_id || "Direct Receipt"}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Supplier</p>
-                    <p>{selectedGrnDetails.supplier_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Receiving Date</p>
-                    <p>{selectedGrnDetails.received_date}</p>
-                  </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Supplier</p>
+                  <p>{selectedGrnDetails.supplier_name}</p>
                 </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Created At</p>
+                  <p>{formatCreatedDate(selectedGrnDetails.created_at)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Created By</p>
+                  <p>{selectedGrnDetails.created_by || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">ASN</p>
+                  <p>{selectedGrnDetails.asn_id || "Direct Receipt"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Receiving Date</p>
+                  <p>{selectedGrnDetails.received_date || "-"}</p>
+                </div>
+              </div>
 
-                {selectedGrnDetails.notes && (
-  <div className="mt-2 text-sm">
-    <p className="text-xs text-muted-foreground">Notes</p>
-    <p>{selectedGrnDetails.notes}</p>
-  </div>
-)}
+              {selectedGrnDetails.notes && (
+                <p className="text-xs text-muted-foreground">Notes: {selectedGrnDetails.notes}</p>
+              )}
 
                 <div className="rounded-md border overflow-hidden">
                   <table className="w-full text-xs">
@@ -591,27 +648,122 @@ const performCancellation = async (reason) => {
                         <th className="text-left px-2 py-1">SKU</th>
                         <th className="text-left px-2 py-1">Expected</th>
                         <th className="text-left px-2 py-1">Received</th>
+                        {selectedGrnDetails.status === "receiving" && (
+                          <th className="text-left px-2 py-1">Status</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
-                      {(selectedGrnDetails.lines || []).map((line) => (
-                        <tr key={`${selectedGrnDetails.grn_id}-${line.line_no}`} className="border-t">
-                          <td className="px-2 py-1">{line.sku_id}</td>
-                          <td className="px-2 py-1">{line.expected_qty}</td>
-                          <td className="px-2 py-1">{line.received_qty}</td>
-                        </tr>
-                      ))}
+                      {(selectedGrnDetails.lines || []).map((line) => {
+                        const received = Number(receivingQty[line.line_no] ?? line.received_qty ?? 0);
+                        const expected = Number(line.expected_qty);
+                        const isEditing = selectedGrnDetails.status === "receiving";
+                        const lineStatus = received === 0
+                          ? "pending"
+                          : received === expected
+                          ? "matched"
+                          : received > expected
+                          ? "over"
+                          : "short";
+                        return (
+                          <tr key={`${selectedGrnDetails.grn_id}-${line.line_no}`} className="border-t">
+                            <td className="px-2 py-1 font-mono">{line.sku_id}</td>
+                            <td className="px-2 py-1">{line.expected_qty}</td>
+                            <td className="px-2 py-1">
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={receivingQty[line.line_no] ?? 0}
+                                  onChange={(e) => setReceivingQty((prev) => ({
+                                    ...prev,
+                                    [line.line_no]: e.target.value === "" ? 0 : Number(e.target.value),
+                                  }))}
+                                  className="w-16 px-1.5 py-0.5 border rounded text-xs text-center"
+                                  style={{
+                                    borderColor: lineStatus === "matched" ? "#639922"
+                                      : lineStatus === "over" ? "#E24B4A"
+                                      : lineStatus === "short" ? "#BA7517"
+                                      : "var(--color-border-secondary)",
+                                  }}
+                                />
+                              ) : (
+                                <span>{line.received_qty}</span>
+                              )}
+                            </td>
+                            {isEditing && (
+                              <td className="px-2 py-1">
+                                <span style={{
+                                  fontSize: 10, padding: "2px 7px", borderRadius: 20,
+                                  background: lineStatus === "matched" ? "#EAF3DE"
+                                    : lineStatus === "over" ? "#FCEBEB"
+                                    : lineStatus === "short" ? "#FAEEDA"
+                                    : "#F1EFE8",
+                                  color: lineStatus === "matched" ? "#27500A"
+                                    : lineStatus === "over" ? "#791F1F"
+                                    : lineStatus === "short" ? "#633806"
+                                    : "#5F5E5A",
+                                }}>
+                                  {lineStatus === "pending" ? "Pending"
+                                    : lineStatus === "matched" ? "Matched"
+                                    : lineStatus === "over" ? `Over (+${received - expected})`
+                                    : `Short (${received}/${expected})`}
+                                </span>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
 
-                {selectedGrnDetails.status === "cancelled" && (
-                  <p className="text-xs text-amber-700">This GRN is cancelled and cannot be changed.</p>
-                )}
                 {selectedGrnDetails.cancellation_reason && (
-                  <p className="text-xs text-muted-foreground">Reason: {selectedGrnDetails.cancellation_reason}</p>
+                  <p className="text-xs text-destructive">
+                    Cancellation Reason: {selectedGrnDetails.cancellation_reason}
+                  </p>
                 )}
-                <div>{renderActionButtons("grn", selectedGrnDetails)}</div>
+
+                <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+                  {selectedGrnDetails.status === "receiving" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] px-2"
+                      disabled={savingLines || Boolean(submittingKey) || cancelling}
+                      onClick={() => handleSaveReceivedQty(selectedGrnDetails)}
+                    >
+                      {savingLines ? "Saving..." : "Save Quantities"}
+                    </Button>
+                  )}
+                  {(() => {
+                    const actionMap = grnStatusActions;
+                    const actions = actionMap[selectedGrnDetails.status] || [];
+                    const visibleActions = actions.filter((action) => {
+                      if (action === "cancel") return canCancelRole(roleId);
+                      return canTransition(roleId, "grn", action);
+                    });
+                    if (visibleActions.length === 0 && selectedGrnDetails.status !== "receiving") {
+                      return <span className="text-xs text-muted-foreground">No actions</span>;
+                    }
+                    return visibleActions.map((action) => {
+                      const key = `${selectedGrnDetails.grn_id}-${action}`;
+                      const isBusy = submittingKey === key;
+                      return (
+                        <Button
+                          key={action}
+                          size="sm"
+                          variant={action === "cancel" ? "destructive" : "outline"}
+                          className="h-7 text-[11px] px-2"
+                          disabled={Boolean(submittingKey) || cancelling || savingLines}
+                          onClick={() => handleGrnAction(selectedGrnDetails, action)}
+                        >
+                          {isBusy ? "Working..." : grnActionLabels[action]}
+                        </Button>
+                      );
+                    });
+                  })()}
+                </div>
               </CardContent>
             </Card>
           )}

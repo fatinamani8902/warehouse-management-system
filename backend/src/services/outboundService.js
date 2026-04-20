@@ -101,7 +101,6 @@ function deleteOrder(context, orderId) {
 /* ---------- RELEASE ORDER ---------- */
 
 function releaseOrder(context, orderId) {
-
   const order = db.orders.find(
     o => o.order_id === orderId && o.tenant_id === context.tenantId
   );
@@ -116,23 +115,35 @@ function releaseOrder(context, orderId) {
 
   order.status = "released";
 
-  const pickingTask = {
-    task_id:
-      "PCK" +
-      String(Math.floor(Math.random() * 1000)).padStart(3, "0"),
-    order_id: orderId,
-    tenant_id: context.tenantId,
-    status: "READY",
-    assignee: context.userId,
-    created_at: nowIso(),
-  };
-  
-  db.pickingTasks.push(pickingTask);
+  // ✅ Guna db.pick_lists instead of db.pickingTasks
+  const pickListId = "PCK" + String(db.pick_lists.length + 1).padStart(6, "0");
 
-  return {
-    order,
-    pickingTask
+  const pickList = {
+    pick_list_id: pickListId,
+    wave_id: "WAV" + String(db.pick_lists.length + 1).padStart(6, "0"),
+    tenant_id: context.tenantId,
+    warehouse_id: "WH000001",
+    assigned_to_user_id: null,
+    assigned_to_user_name: null,
+    status: "draft",
+    created_at: new Date().toISOString(),
+    started_at: null,
+    completed_at: null,
+    updated_at: new Date().toISOString(),
+    updated_by: context.userId,
+    lines: order.lines.map((line, index) => ({
+      line_no: index + 1,
+      sku_id: line.sku_id,
+      location_id: "LOC000001",
+      qty_required: line.ordered_qty,
+      qty_picked: 0,
+      status: "pending",
+    })),
   };
+
+  db.pick_lists.push(pickList);
+
+  return { order, pickList };
 }
 
 export {

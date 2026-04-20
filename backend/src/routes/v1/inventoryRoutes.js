@@ -1,162 +1,370 @@
 import express from "express";
-import { requireRole } from "../../middlewares/auth.js";
+import {
+  listInventoryZones,
+  listInventoryLocations,
+  listInventoryReasonCodes,
+  getInventoryConfig,
+  listInventorySummary,
+  listSkus,
+  listCountPlans,
+  getCountPlan,
+  listCountPlanLines,
+  listCountEntries,
+  createCountPlan,
+  addCountEntry,
+  submitCountPlan,
+  approveCountPlan,
+  rejectCountPlan,
+  cancelCountPlan,
+  listAdjustmentRequests,
+  getAdjustmentRequest,
+  createAdjustmentRequest,
+  submitAdjustmentRequest,
+  approveAdjustmentRequest,
+  rejectAdjustmentRequest,
+  cancelAdjustmentRequest,
+} from "../../data/store.js";
 
 const router = express.Router();
 
-const allowedRoles = [
-  "superadmin",
-  "hqadmin",
-  "storemanager",
-  "warehousemanager",
-  "storeoperator"
-];
+/* =========================
+   OPTIONS
+========================= */
 
-/* ==============================
-   INVENTORY OPTIONS
-============================== */
-router.get("/options", requireRole(allowedRoles), (req, res) => {
+router.get("/options", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
 
-  res.json({
-    zones: [
-      { zone_id: "PICK", zone_name: "Picking Zone" },
-      { zone_id: "STORAGE", zone_name: "Storage Zone" }
-    ],
+    const zones = listInventoryZones(tenantId, warehouseId);
+    const locations = listInventoryLocations(tenantId, warehouseId);
+    const reasonCodes = listInventoryReasonCodes(tenantId);
+    const config = getInventoryConfig(tenantId);
+    const skus = listSkus(tenantId, { pageSize: 999 })?.items || [];
 
-    locations: [
-      { location_id: "LOC001", location_code: "A01-01" },
-      { location_id: "LOC002", location_code: "B01-01" }
-    ],
-
-    reason_codes: [
-      { reason_code: "DMG", reason_name: "Damaged" },
-      { reason_code: "MISS", reason_name: "Missing" }
-    ],
-
-    count_config: {
-      variance_threshold_mode: "absolute",
-      variance_threshold_abs: 5
-    }
-
-  });
-
+    res.json({
+      zones,
+      locations,
+      reason_codes: reasonCodes,
+      count_config: config,
+      skus,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-/* ==============================
-   STOCK SUMMARY
-============================== */
-router.get("/summary", requireRole(allowedRoles), (req, res) => {
+/* =========================
+   SUMMARY
+========================= */
 
-  res.json({
-    items: [
-      {
-        sku_id: "SKU000001",
-        sku_description: "Product A",
-        location_id: "LOC001",
-        location_code: "A01-01",
-        zone_id: "PICK",
-        on_hand_qty: 100,
-        reserved_qty: 10,
-        available_qty: 90,
-        quarantine_qty: 0
-      },
-      {
-        sku_id: "SKU000002",
-        sku_description: "Product B",
-        location_id: "LOC002",
-        location_code: "B01-01",
-        zone_id: "STORAGE",
-        on_hand_qty: 50,
-        reserved_qty: 5,
-        available_qty: 45,
-        quarantine_qty: 0
-      }
-    ],
-    total: 2
-  });
+router.get("/summary", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+    const page = Number(req.query.page) || 1;
+    const pageSize = Number(req.query.pageSize) || 10;
 
+    const result = listInventorySummary({
+      tenantId,
+      warehouseId,
+      page,
+      pageSize,
+      search: req.query.search || "",
+      skuId: req.query.sku_id || "",
+      locationId: req.query.location_id || "",
+      zoneId: req.query.zone_id || "",
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-/* ==============================
+/* =========================
    COUNT PLANS
-============================== */
-router.get("/count-plans", requireRole(allowedRoles), (req, res) => {
+========================= */
 
-  res.json({
-    items: [
-      {
-        count_id: "CC000001",
-        zone_id: "PICK",
-        planned_date: "2026-03-15",
-        lines_count: 10,
-        status: "DRAFT"
-      }
-    ],
-    total: 1
-  });
+router.get("/count-plans", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
 
+    const result = listCountPlans({
+      tenantId,
+      warehouseId,
+      page: Number(req.query.page) || 1,
+      pageSize: Number(req.query.pageSize) || 10,
+      search: req.query.search || "",
+      status: req.query.status || "",
+      zoneId: req.query.zone_id || "",
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-/* ==============================
-   COUNT PLAN DETAIL
-============================== */
-router.get("/count-plans/:id", requireRole(allowedRoles), (req, res) => {
+// ✅ GET COUNT PLAN BY ID — mesti sebelum /:id/action routes
+router.get("/count-plans/:id", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
 
-  res.json({
-    count_id: req.params.id,
-    zone_id: "PICK",
-    planned_date: "2026-03-15",
-    status: "DRAFT",
-    created_at: new Date(),
+    const plan = getCountPlan(tenantId, req.params.id, warehouseId);
+    if (!plan) return res.status(404).json({ message: "Count plan not found" });
 
-    lines: [
-      {
-        line_id: "LINE001",
-        sku_id: "SKU000001",
-        location_id: "LOC001",
-        system_qty: 100,
-        counted_qty: null,
-        variance_qty: null,
-        status: "OPEN"
-      }
-    ]
-  });
+    const lines = listCountPlanLines(tenantId, req.params.id);
+    const entries = listCountEntries(tenantId, req.params.id);
 
+    res.json({ ...plan, lines, entries });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-/* ==============================
-   ADJUSTMENTS LIST
-============================== */
-router.get("/adjustments", requireRole(allowedRoles), (req, res) => {
+router.post("/count-plans", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
 
-  res.json({
-    items: [
-      {
-        adj_id: "ADJ000001",
-        sku_id: "SKU000001",
-        location_id: "LOC001",
-        qty_delta: -5,
-        reason_code: "DMG",
-        status: "SUBMITTED",
-        requested_at: new Date()
-      }
-    ],
-    total: 1
-  });
+    const result = createCountPlan({
+      tenantId,
+      warehouseId,
+      userId: req.user_id || "USR000001",
+      zoneId: req.body.zone_id,
+      plannedDate: req.body.planned_date,
+      scopeType: req.body.scope_type || "FULL_ZONE",
+    });
 
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.status(201).json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-/* ==============================
-   CREATE ADJUSTMENT
-============================== */
-router.post("/adjustments", requireRole(allowedRoles), (req, res) => {
+router.post("/count-plans/:id/entries", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
 
-  res.json({
-    adj_id: "ADJ000002",
-    ...req.body,
-    status: "SUBMITTED",
-    requested_at: new Date()
-  });
+    const result = addCountEntry({
+      tenantId,
+      warehouseId,
+      countId: req.params.id,
+      lineId: req.body.line_id || null,
+      scanMode: req.body.scan_mode || "MANUAL",
+      scannedValue: req.body.scanned_value || "",
+      qtyCounted: req.body.qty_counted,
+      scannedBy: req.user_id || "USR000001",
+    });
 
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/count-plans/:id/submit", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = submitCountPlan({
+      tenantId,
+      warehouseId,
+      countId: req.params.id,
+      submittedBy: req.user_id || "USR000001",
+    });
+
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/count-plans/:id/approve", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = approveCountPlan({
+      tenantId,
+      warehouseId,
+      countId: req.params.id,
+      approvedBy: req.user_id || "USR000001",
+      reasonCode: req.body.reason_code,
+      approvalNote: req.body.approval_note || "",
+    });
+
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/count-plans/:id/reject", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = rejectCountPlan({
+      tenantId,
+      warehouseId,
+      countId: req.params.id,
+      approvedBy: req.user_id || "USR000001",
+      reason: req.body.reason || "",
+    });
+
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/count-plans/:id/cancel", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = cancelCountPlan({
+      tenantId,
+      warehouseId,
+      countId: req.params.id,
+      cancelledBy: req.user_id || "USR000001",
+      reason: req.body.reason || "",
+    });
+
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/* =========================
+   ADJUSTMENTS
+========================= */
+
+router.get("/adjustments", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = listAdjustmentRequests({
+      tenantId,
+      warehouseId,
+      page: Number(req.query.page) || 1,
+      pageSize: Number(req.query.pageSize) || 10,
+      search: req.query.search || "",
+      status: req.query.status || "",
+      skuId: req.query.sku_id || "",
+      locationId: req.query.location_id || "",
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/adjustments/:id", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const adj = getAdjustmentRequest(tenantId, req.params.id);
+    if (!adj) return res.status(404).json({ message: "Adjustment not found" });
+    res.json(adj);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/adjustments", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = createAdjustmentRequest({
+      tenantId,
+      warehouseId,
+      requestedBy: req.user_id || "USR000001",
+      skuId: req.body.sku_id,
+      locationId: req.body.location_id,
+      qtyDelta: req.body.qty_delta,
+      reasonCode: req.body.reason_code,
+    });
+
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.status(201).json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/adjustments/:id/submit", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const result = submitAdjustmentRequest({ tenantId, adjId: req.params.id });
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/adjustments/:id/approve", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const result = approveAdjustmentRequest({
+      tenantId,
+      adjId: req.params.id,
+      approvedBy: req.user_id || "USR000001",
+      approvalNote: req.body.approval_note || "",
+    });
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/adjustments/:id/reject", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const result = rejectAdjustmentRequest({
+      tenantId,
+      adjId: req.params.id,
+      approvedBy: req.user_id || "USR000001",
+      reason: req.body.reason || "",
+    });
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.post("/adjustments/:id/cancel", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const result = cancelAdjustmentRequest({
+      tenantId,
+      adjId: req.params.id,
+      cancelledBy: req.user_id || "USR000001",
+      reason: req.body.reason || "",
+    });
+    if (result.error) return res.status(400).json({ message: result.error });
+    res.json(result.data);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 export default router;

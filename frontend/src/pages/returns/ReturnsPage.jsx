@@ -23,6 +23,91 @@ import {
   fetchRmas,
 } from "@/services/api";
 
+// transition helper — confirm or close a return
+async function transitionReturnStatus(session, returnId, action) {
+  const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1`;
+  const response = await fetch(`${API_BASE}/returns/${returnId}/transition`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "x-tenant-id": session.tenant_id || "",
+      "x-user-id": session.user_id || "",
+      "x-roles": session.role_id || "superadmin",
+      "x-warehouse-id": session.warehouse_id || "",
+      "x-client-source": "PORTAL",
+    },
+    credentials: "include",
+    body: JSON.stringify({ action }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.message || `Request failed ${response.status}`);
+  return data;
+}
+
+// transition helper — process or complete an RMA
+async function transitionRmaStatus(session, rmaId, action) {
+  const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1`;
+  const response = await fetch(`${API_BASE}/rma/${rmaId}/transition`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "x-tenant-id": session.tenant_id || "",
+      "x-user-id": session.user_id || "",
+      "x-roles": session.role_id || "superadmin",
+      "x-warehouse-id": session.warehouse_id || "",
+      "x-client-source": "PORTAL",
+    },
+    credentials: "include",
+    body: JSON.stringify({ action }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.message || `Request failed ${response.status}`);
+  return data;
+}
+
+// cancel RMA helper
+async function cancelRmaRequest(session, rmaId, reason) {
+  const API_BASE = `${import.meta.env.VITE_API_URL}/api/v1`;
+  const response = await fetch(`${API_BASE}/rma/${rmaId}/cancel`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      "x-tenant-id": session.tenant_id || "",
+      "x-user-id": session.user_id || "",
+      "x-roles": session.role_id || "superadmin",
+      "x-warehouse-id": session.warehouse_id || "",
+      "x-client-source": "PORTAL",
+    },
+    credentials: "include",
+    body: JSON.stringify({ cancellation_reason: reason }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(data?.message || `Request failed ${response.status}`);
+  return data;
+}
+
+const rmaStatusTransitions = {
+  created:     { action: "process",  label: "Process",  nextStatus: "processing" },
+  processing:  { action: "complete", label: "Complete", nextStatus: "completed"  },
+};
+
+function stepperForRmaStatus(status) {
+  const flow = ["open", "processing", "completed"];
+  if (status === "cancelled") {
+    return flow.map((label, i) => ({ label, status: i === 0 ? "current" : "pending" }));
+  }
+  const currentIndex = flow.indexOf(status);
+  // "created" and any unknown status maps to first step (open)
+  if (currentIndex === -1) {
+    return flow.map((label, i) => ({ label, status: i === 0 ? "current" : "pending" }));
+  }
+  return flow.map((label, i) => {
+    if (i < currentIndex) return { label, status: "completed" };
+    if (i === currentIndex) return { label, status: "current" };
+    return { label, status: "pending" };
+  });
+}
+
 const roleAliases = {
   superadmin: "warehousemanager",
   hqadmin: "warehousemanager",
@@ -42,7 +127,18 @@ const returnReasonOptions = [
   { value: "not_as_described", label: "Not As Described" },
 ];
 
-const cancellableStatuses = ["draft", "new", "submitted", "created"];
+// FIX: only "created" status is cancellable — confirmed and closed are too far along
+const cancellableStatuses = ["created"];
+
+// status transitions: created → confirmed → closed
+const statusTransitions = {
+  created:   { action: "confirm",  label: "Confirm",  nextStatus: "confirmed" },
+  confirmed: { action: "close",    label: "Close",    nextStatus: "closed"    },
+};
+
+function canTransitionStatus(status) {
+  return Boolean(statusTransitions[status]);
+}
 
 const initialCreateForm = {
   shipment_id: "",
@@ -64,42 +160,35 @@ function canCancelStatus(status) {
 }
 
 function canCreateRmaFromStatus(status) {
-  return !["received", "closed", "cancelled"].includes(status);
+  return !["closed", "cancelled"].includes(status);
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "-";
-  }
-
+  if (!value) return "-";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "-";
-  }
-
+  if (Number.isNaN(parsed.getTime())) return "-";
   return parsed.toLocaleString();
 }
 
 function stepperForReturnStatus(status) {
-  const flow = ["new", "submitted", "created", "closed"];
+  const flow = ["created", "confirmed", "closed"];
   if (status === "cancelled") {
     return flow.map((label, index) => ({
       label,
       status: index === 0 ? "current" : "pending",
     }));
   }
-
-  let seenCurrent = false;
-  return flow.map((label) => {
-    if (label === status) {
-      seenCurrent = true;
-      return { label, status: "current" };
-    }
-
-    if (!seenCurrent) {
-      return { label, status: "completed" };
-    }
-
+  const currentIndex = flow.indexOf(status);
+  // unknown status maps to first step
+  if (currentIndex === -1) {
+    return flow.map((label, index) => ({
+      label,
+      status: index === 0 ? "current" : "pending",
+    }));
+  }
+  return flow.map((label, index) => {
+    if (index < currentIndex) return { label, status: "completed" };
+    if (index === currentIndex) return { label, status: "current" };
     return { label, status: "pending" };
   });
 }
@@ -131,6 +220,10 @@ const ReturnsPage = () => {
     [roleId],
   );
   const canCancelReturnRole = useMemo(() => roleId === "warehousemanager", [roleId]);
+  const canTransitionReturn = useMemo(
+    () => ["warehousemanager"].includes(roleId),
+    [roleId],
+  );
 
   const [activeTab, setActiveTab] = useState("returns");
   const [loading, setLoading] = useState(true);
@@ -148,6 +241,7 @@ const ReturnsPage = () => {
   const [createFormErrors, setCreateFormErrors] = useState({});
 
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelRmaTarget, setCancelRmaTarget] = useState(null);
 
   const selectedReturn = useMemo(
     () => returnsData.find((row) => row.return_id === selectedReturnId) || null,
@@ -160,16 +254,22 @@ const ReturnsPage = () => {
   );
 
   const relatedRmasForSelectedReturn = useMemo(() => {
-    if (!selectedReturn) {
-      return [];
-    }
+    if (!selectedReturn) return [];
     return rmasData.filter((row) => row.return_id === selectedReturn.return_id);
   }, [rmasData, selectedReturn]);
 
+  // FIX: extract reason codes from linked RMA items for display in Returns detail view
+  const reasonCodesForSelectedReturn = useMemo(() => {
+    if (relatedRmasForSelectedReturn.length === 0) return [];
+    return relatedRmasForSelectedReturn
+      .flatMap((rma) => rma.items || [])
+      .map((item) => item.reason_code)
+      .filter(Boolean)
+      .filter((v, i, arr) => arr.indexOf(v) === i); // dedupe
+  }, [relatedRmasForSelectedReturn]);
+
   const loadData = useCallback(async () => {
-    if (!tenantId) {
-      return;
-    }
+    if (!tenantId) return;
 
     try {
       setLoading(true);
@@ -190,15 +290,11 @@ const ReturnsPage = () => {
       setRmasData(normalizedRmas);
 
       setSelectedReturnId((current) => {
-        if (current && normalizedReturns.some((row) => row.return_id === current)) {
-          return current;
-        }
+        if (current && normalizedReturns.some((row) => row.return_id === current)) return current;
         return normalizedReturns[0]?.return_id || "";
       });
       setSelectedRmaId((current) => {
-        if (current && normalizedRmas.some((row) => row.rma_id === current)) {
-          return current;
-        }
+        if (current && normalizedRmas.some((row) => row.rma_id === current)) return current;
         return normalizedRmas[0]?.rma_id || "";
       });
     } catch (loadError) {
@@ -213,48 +309,27 @@ const ReturnsPage = () => {
   }, [loadData]);
 
   const updateCreateForm = (field, value) => {
-    setCreateForm((current) => ({
-      ...current,
-      [field]: value,
-    }));
-    setCreateFormErrors((current) => ({
-      ...current,
-      [field]: "",
-    }));
+    setCreateForm((current) => ({ ...current, [field]: value }));
+    setCreateFormErrors((current) => ({ ...current, [field]: "" }));
   };
 
   const validateCreateReturnForm = () => {
     const errors = {};
-
-    if (!createForm.shipment_id.trim()) {
-      errors.shipment_id = "Shipment ID is required";
-    }
-    if (!createForm.customer_id.trim()) {
-      errors.customer_id = "Customer ID is required";
-    }
-    if (!createForm.customer_name.trim()) {
-      errors.customer_name = "Customer name is required";
-    }
-    if (!createForm.sku_id.trim()) {
-      errors.sku_id = "SKU ID is required";
-    }
-    if (!createForm.reason_code.trim()) {
-      errors.reason_code = "Reason code is required";
-    }
+    if (!createForm.shipment_id.trim()) errors.shipment_id = "Shipment ID is required";
+    if (!createForm.customer_id.trim()) errors.customer_id = "Customer ID is required";
+    if (!createForm.customer_name.trim()) errors.customer_name = "Customer name is required";
+    if (!createForm.sku_id.trim()) errors.sku_id = "SKU ID is required";
+    if (!createForm.reason_code.trim()) errors.reason_code = "Reason code is required";
 
     const parsedQty = Number(createForm.qty);
-    if (!Number.isFinite(parsedQty) || parsedQty <= 0) {
-      errors.qty = "Quantity must be greater than 0";
-    }
+    if (!Number.isFinite(parsedQty) || parsedQty <= 0) errors.qty = "Quantity must be greater than 0";
 
     setCreateFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const submitCreateReturn = async () => {
-    if (!validateCreateReturnForm()) {
-      return;
-    }
+    if (!validateCreateReturnForm()) return;
 
     try {
       setActionKey("create-return");
@@ -276,10 +351,7 @@ const ReturnsPage = () => {
       setSelectedReturnId(created.return_id);
       setShowCreateReturn(false);
       setCreateForm(initialCreateForm);
-      toast({
-        title: "Return created",
-        description: `Return ${created.return_id} created successfully`,
-      });
+      toast({ title: "Return created", description: `Return ${created.return_id} created successfully` });
     } catch (createError) {
       const message = createError.message || "Unable to create return";
       setError(message);
@@ -290,9 +362,7 @@ const ReturnsPage = () => {
   };
 
   const handleCreateRma = async (returnRecord) => {
-    if (!returnRecord) {
-      return;
-    }
+    if (!returnRecord) return;
 
     try {
       const busyKey = `create-rma-${returnRecord.return_id}`;
@@ -303,9 +373,7 @@ const ReturnsPage = () => {
         notes: `Created from return ${returnRecord.return_id}`,
       });
       const updatedReturn = created?.return || null;
-      const rmaRecord = {
-        ...created,
-      };
+      const rmaRecord = { ...created };
       delete rmaRecord.return;
 
       setRmasData((current) => [rmaRecord, ...current.filter((row) => row.rma_id !== rmaRecord.rma_id)]);
@@ -317,10 +385,7 @@ const ReturnsPage = () => {
 
       setSelectedRmaId(rmaRecord.rma_id);
       setActiveTab("rma");
-      toast({
-        title: "RMA created",
-        description: `RMA ${rmaRecord.rma_id} created from ${returnRecord.return_id}`,
-      });
+      toast({ title: "RMA created", description: `RMA ${rmaRecord.rma_id} created from ${returnRecord.return_id}` });
     } catch (createError) {
       const message = createError.message || "Unable to create RMA";
       setError(message);
@@ -331,9 +396,7 @@ const ReturnsPage = () => {
   };
 
   const handleConfirmCancel = async (reason) => {
-    if (!cancelTarget) {
-      return;
-    }
+    if (!cancelTarget) return;
 
     try {
       const busyKey = `cancel-${cancelTarget.return_id}`;
@@ -365,10 +428,146 @@ const ReturnsPage = () => {
     }
   };
 
+  const handleTransitionReturn = async (returnRecord, action, nextStatus) => {
+    if (!returnRecord) return;
+    const busyKey = `transition-${returnRecord.return_id}`;
+    try {
+      setActionKey(busyKey);
+      setError("");
+      const response = await transitionReturnStatus(session, returnRecord.return_id, action);
+      const updated = response?.document || response;
+      if (updated?.return_id) {
+        setReturnsData((current) =>
+          current.map((row) => (row.return_id === updated.return_id ? updated : row)),
+        );
+      } else {
+        // optimistic update if backend doesn't return document
+        setReturnsData((current) =>
+          current.map((row) =>
+            row.return_id === returnRecord.return_id
+              ? { ...row, status: nextStatus }
+              : row,
+          ),
+        );
+      }
+      toast({
+        title: "Status updated",
+        description: `Return ${returnRecord.return_id} moved to ${nextStatus}`,
+      });
+    } catch (err) {
+      const message = err.message || "Unable to update status";
+      setError(message);
+      toast({ title: "Update failed", description: message, variant: "destructive" });
+    } finally {
+      setActionKey("");
+    }
+  };
+
+  const handleTransitionRma = async (rmaRecord, action, nextStatus) => {
+    if (!rmaRecord) return;
+    const busyKey = `rma-transition-${rmaRecord.rma_id}`;
+    try {
+      setActionKey(busyKey);
+      setError("");
+      const response = await transitionRmaStatus(session, rmaRecord.rma_id, action);
+      const updated = response?.document;
+      setRmasData((current) =>
+        current.map((row) =>
+          row.rma_id === rmaRecord.rma_id
+            ? updated || { ...row, status: nextStatus }
+            : row,
+        ),
+      );
+      toast({
+        title: "RMA updated",
+        description: `RMA ${rmaRecord.rma_id} moved to ${nextStatus}`,
+      });
+    } catch (err) {
+      const message = err.message || "Unable to update RMA";
+      setError(message);
+      toast({ title: "Update failed", description: message, variant: "destructive" });
+    } finally {
+      setActionKey("");
+    }
+  };
+
+  const handleConfirmCancelRma = async (reason) => {
+    if (!cancelRmaTarget) return;
+    const busyKey = `rma-cancel-${cancelRmaTarget.rma_id}`;
+    try {
+      setActionKey(busyKey);
+      setError("");
+      const response = await cancelRmaRequest(session, cancelRmaTarget.rma_id, reason);
+      const updated = response?.document;
+      setRmasData((current) =>
+        current.map((row) =>
+          row.rma_id === cancelRmaTarget.rma_id
+            ? updated || { ...row, status: "cancelled" }
+            : row,
+        ),
+      );
+      setCancelRmaTarget(null);
+      toast({
+        title: "RMA cancelled",
+        description: `RMA ${cancelRmaTarget.rma_id} cancelled successfully`,
+      });
+    } catch (err) {
+      const message = err.message || "Unable to cancel RMA";
+      setError(message);
+      toast({ title: "Cancellation failed", description: message, variant: "destructive" });
+    } finally {
+      setActionKey("");
+    }
+  };
+
+  const renderRmaActions = (rmaRecord) => {
+    const actions = [];
+    const transition = rmaStatusTransitions[rmaRecord.status];
+
+    if (transition) {
+      const busyKey = `rma-transition-${rmaRecord.rma_id}`;
+      actions.push(
+        <Button
+          key="rma-transition"
+          size="sm"
+          variant="outline"
+          className="h-7 text-[11px] px-2"
+          disabled={Boolean(actionKey) || loading}
+          onClick={() => handleTransitionRma(rmaRecord, transition.action, transition.nextStatus)}
+        >
+          {actionKey === busyKey ? "Updating..." : transition.label}
+        </Button>,
+      );
+    }
+
+    if (rmaRecord.status === "open") {
+      const busyKey = `rma-cancel-${rmaRecord.rma_id}`;
+      actions.push(
+        <Button
+          key="rma-cancel"
+          size="sm"
+          variant="destructive"
+          className="h-7 text-[11px] px-2"
+          disabled={Boolean(actionKey) || loading}
+          onClick={() => setCancelRmaTarget(rmaRecord)}
+        >
+          {actionKey === busyKey ? "Cancelling..." : "Cancel"}
+        </Button>,
+      );
+    }
+
+    if (actions.length === 0) {
+      return <span className="text-xs text-muted-foreground">No actions</span>;
+    }
+
+    return <div className="flex flex-wrap gap-1">{actions}</div>;
+  };
+
   const renderReturnActions = (row) => {
     const actions = [];
     const hasActiveRma = Boolean(row.active_rma_id);
 
+    // Create RMA — only when no active RMA and status allows it
     if (canCreateRma && canCreateRmaFromStatus(row.status) && !hasActiveRma) {
       const busyKey = `create-rma-${row.return_id}`;
       actions.push(
@@ -388,6 +587,28 @@ const ReturnsPage = () => {
       );
     }
 
+    // Status transition — Confirm (created→confirmed) or Close (confirmed→closed)
+    if (canTransitionReturn && canTransitionStatus(row.status)) {
+      const transition = statusTransitions[row.status];
+      const busyKey = `transition-${row.return_id}`;
+      actions.push(
+        <Button
+          key="transition"
+          size="sm"
+          variant="outline"
+          className="h-7 text-[11px] px-2"
+          disabled={Boolean(actionKey) || loading}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleTransitionReturn(row, transition.action, transition.nextStatus);
+          }}
+        >
+          {actionKey === busyKey ? "Updating..." : transition.label}
+        </Button>,
+      );
+    }
+
+    // Cancel — only on "created" status
     if (canCancelReturnRole && canCancelStatus(row.status)) {
       const busyKey = `cancel-${row.return_id}`;
       actions.push(
@@ -402,7 +623,7 @@ const ReturnsPage = () => {
             setCancelTarget(row);
           }}
         >
-          {actionKey === busyKey ? "Cancelling..." : "Cancel Return"}
+          {actionKey === busyKey ? "Cancelling..." : "Cancel"}
         </Button>,
       );
     }
@@ -432,17 +653,13 @@ const ReturnsPage = () => {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
-      key: "cancellation_reason",
-      label: "Cancellation Reason",
-      render: (row) => row.cancellation_reason || "-",
-    },
-    {
       key: "actions",
       label: "Actions",
       render: (row) => renderReturnActions(row),
     },
   ];
 
+  // FIX: removed "Cancellation Reason" column from RMA table — no cancel flow for RMA
   const rmaColumns = [
     { key: "rma_id", label: "RMA ID", sortable: true },
     { key: "return_id", label: "Return ID", sortable: true },
@@ -459,9 +676,13 @@ const ReturnsPage = () => {
       render: (row) => <StatusBadge status={row.status} />,
     },
     {
-      key: "cancellation_reason",
-      label: "Cancellation Reason",
-      render: (row) => row.cancellation_reason || "-",
+      key: "actions",
+      label: "Actions",
+      render: (row) => (
+        <div onClick={(e) => e.stopPropagation()}>
+          {renderRmaActions(row)}
+        </div>
+      ),
     },
   ];
 
@@ -518,18 +739,6 @@ const ReturnsPage = () => {
                     <p>{selectedReturn.customer_name || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground">SKU</p>
-                    <p>{selectedReturn.sku_id}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Quantity</p>
-                    <p>{selectedReturn.qty}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Shipment</p>
-                    <p>{selectedReturn.shipment_id || "-"}</p>
-                  </div>
-                  <div>
                     <p className="text-xs text-muted-foreground">Created At</p>
                     <p>{formatDateTime(selectedReturn.created_at)}</p>
                   </div>
@@ -537,12 +746,22 @@ const ReturnsPage = () => {
                     <p className="text-xs text-muted-foreground">Created By</p>
                     <p>{selectedReturn.created_by || "-"}</p>
                   </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Shipment</p>
+                    <p>{selectedReturn.shipment_id || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">SKU</p>
+                    <p>{selectedReturn.sku_id || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Quantity</p>
+                    <p>{selectedReturn.qty}</p>
+                  </div>
                 </div>
 
                 {selectedReturn.notes && (
-                  <p className="text-xs text-muted-foreground">
-                    Notes: {selectedReturn.notes}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Notes: {selectedReturn.notes}</p>
                 )}
                 {selectedReturn.cancellation_reason && (
                   <p className="text-xs text-destructive">
@@ -550,25 +769,46 @@ const ReturnsPage = () => {
                   </p>
                 )}
 
-                <div className="space-y-2">
-                  <p className="text-xs font-medium">Linked RMA</p>
-                  {relatedRmasForSelectedReturn.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No RMA linked to this return.</p>
-                  )}
-                  {relatedRmasForSelectedReturn.map((row) => (
-                    <Button
-                      key={row.rma_id}
-                      variant="outline"
-                      size="sm"
-                      className="mr-2"
-                      onClick={() => {
-                        setSelectedRmaId(row.rma_id);
-                        setActiveTab("rma");
-                      }}
-                    >
-                      {row.rma_id}
-                    </Button>
-                  ))}
+                <div className="rounded-md border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="text-left px-2 py-1">SKU</th>
+                        <th className="text-left px-2 py-1">Qty</th>
+                        <th className="text-left px-2 py-1">Reason Code</th>
+                        <th className="text-left px-2 py-1">Linked RMA</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-t">
+                        <td className="px-2 py-1">{selectedReturn.sku_id || "-"}</td>
+                        <td className="px-2 py-1">{selectedReturn.qty}</td>
+                        <td className="px-2 py-1">
+                          {reasonCodesForSelectedReturn.length > 0
+                            ? reasonCodesForSelectedReturn.join(", ")
+                            : selectedReturn.reason_code || "-"}
+                        </td>
+                        <td className="px-2 py-1">
+                          {relatedRmasForSelectedReturn.length === 0 ? (
+                            <span className="text-muted-foreground">No RMA linked</span>
+                          ) : (
+                            relatedRmasForSelectedReturn.map((row) => (
+                              <button
+                                key={row.rma_id}
+                                className="text-blue-600 underline mr-2 text-xs"
+                                onClick={() => {
+                                  setSelectedRmaId(row.rma_id);
+                                  setActiveTab("rma");
+                                }}
+                              >
+                                {row.rma_id}
+                              </button>
+                            ))
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
 
                 <div>{renderReturnActions(selectedReturn)}</div>
@@ -598,6 +838,8 @@ const ReturnsPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                <WorkflowStepper steps={stepperForRmaStatus(selectedRma.status)} />
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">Return ID</p>
@@ -615,9 +857,6 @@ const ReturnsPage = () => {
 
                 {selectedRma.notes && (
                   <p className="text-xs text-muted-foreground">Notes: {selectedRma.notes}</p>
-                )}
-                {selectedRma.cancellation_reason && (
-                  <p className="text-xs text-destructive">Cancellation Reason: {selectedRma.cancellation_reason}</p>
                 )}
 
                 <div className="rounded-md border overflow-hidden">
@@ -649,6 +888,8 @@ const ReturnsPage = () => {
                     </tbody>
                   </table>
                 </div>
+
+                <div>{renderRmaActions(selectedRma)}</div>
               </CardContent>
             </Card>
           )}
@@ -802,6 +1043,15 @@ const ReturnsPage = () => {
         submitting={actionKey.startsWith("cancel-")}
         onClose={() => setCancelTarget(null)}
         onConfirm={handleConfirmCancel}
+      />
+
+      <CancellationConfirmModal
+        open={Boolean(cancelRmaTarget)}
+        documentType="RMA"
+        documentId={cancelRmaTarget?.rma_id || ""}
+        submitting={actionKey.startsWith("rma-cancel-")}
+        onClose={() => setCancelRmaTarget(null)}
+        onConfirm={handleConfirmCancelRma}
       />
     </AppLayout>
   );

@@ -91,20 +91,34 @@ function applyStubContext(req) {
     permissions,
   };
 
+  // Tambah flat fields untuk routes lama
+  req.tenant_id = tenantId;
+  req.user_id = userId;
+  req.role_id = roles[0] || "superadmin";
+
   return true;
 }
 
 async function verifyClerkJwt(req, _res, next) {
 
-  // DEVELOPMENT BYPASS (SAFE)
+  // DEVELOPMENT BYPASS
   if (process.env.NODE_ENV === "development") {
+    const tenantId = req.headers["x-tenant-id"] || "TNT000001";
+    const userId = req.headers["x-user-id"] || "USR000001";
+    const roles = parseRoles(req.headers["x-roles"] || "superadmin");
+
     req.context = {
       ...req.context,
-      userId: "USR00001",
-      tenantId: "TEN001",
-      roles: ["superadmin"],
+      userId,
+      tenantId,
+      roles,
       permissions: ["*"]
     };
+
+    // Flat fields untuk routes lama (returns.js, rma.js dll)
+    req.tenant_id = tenantId;
+    req.user_id = userId;
+    req.role_id = roles[0] || "superadmin";
 
     return next();
   }
@@ -148,6 +162,11 @@ async function verifyClerkJwt(req, _res, next) {
       roles: resolveRolesFromClaims(payload),
       permissions: resolvePermissionsFromClaims(payload),
     };
+
+    // Flat fields untuk routes lama
+    req.tenant_id = String(tenantId);
+    req.user_id = userId;
+    req.role_id = resolveRolesFromClaims(payload)[0] || "";
 
     return next();
   } catch (error) {

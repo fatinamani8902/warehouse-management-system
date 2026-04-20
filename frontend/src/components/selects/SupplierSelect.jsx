@@ -63,10 +63,7 @@ export default function SupplierSelect({
     };
   }, [tenantId, userId, roleId, warehouseId]);
 
-  const activeSuppliers = useMemo(
-    () => suppliers.filter((supplier) => supplier.is_active),
-    [suppliers],
-  );
+  const activeSuppliers = suppliers;
 
   const statusOption = loading
     ? "Loading suppliers..."

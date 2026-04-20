@@ -17,6 +17,7 @@ import {
   listInventorySummary,
   listInventoryTransactions,
   listInventoryZones,
+  listSkus,
   rejectAdjustmentRequest,
   rejectCountPlan,
   submitAdjustmentRequest,
@@ -76,6 +77,7 @@ router.get("/options", (req, res) => {
   return res.json({
     zones: listInventoryZones(req.tenant_id, warehouseScope),
     locations: listInventoryLocations(req.tenant_id, warehouseScope),
+    skus: listSkus(req.tenant_id, { pageSize: 999 })?.items || [],
     reason_codes: listInventoryReasonCodes(req.tenant_id),
     count_config: getInventoryConfig(req.tenant_id),
   });

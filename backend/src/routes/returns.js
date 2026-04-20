@@ -18,8 +18,12 @@ import {
 
 const router = express.Router();
 
-const CANCELLABLE_RETURN_STATUSES = new Set(["draft", "new", "submitted", "created"]);
-const RETURN_TERMINAL_STATUSES = new Set(["received", "closed", "cancelled"]);
+const CANCELLABLE_RETURN_STATUSES = new Set(["created"]);
+const RETURN_TERMINAL_STATUSES = new Set(["confirmed", "closed", "cancelled"]);
+const RETURN_TRANSITION_MAP = {
+  confirm: { from: "created",   to: "confirmed" },
+  close:   { from: "confirmed", to: "closed"    },
+};
 
 function validateCancelBody(body) {
   const cancellationReason = String(body?.cancellation_reason || "").trim();
@@ -60,24 +64,12 @@ function validateCreateReturnBody(body) {
   const reasonCode = String(body?.reason_code || "").trim();
   const qty = Number(body?.qty);
 
-  if (!shipmentId) {
-    return { error: "shipment_id is required" };
-  }
-  if (!customerId) {
-    return { error: "customer_id is required" };
-  }
-  if (!customerName) {
-    return { error: "customer_name is required" };
-  }
-  if (!skuId) {
-    return { error: "sku_id is required" };
-  }
-  if (!reasonCode) {
-    return { error: "reason_code is required" };
-  }
-  if (!Number.isFinite(qty) || qty <= 0) {
-    return { error: "qty must be greater than 0" };
-  }
+  if (!shipmentId) return { error: "shipment_id is required" };
+  if (!customerId) return { error: "customer_id is required" };
+  if (!customerName) return { error: "customer_name is required" };
+  if (!skuId) return { error: "sku_id is required" };
+  if (!reasonCode) return { error: "reason_code is required" };
+  if (!Number.isFinite(qty) || qty <= 0) return { error: "qty must be greater than 0" };
 
   return {
     shipmentId,
@@ -99,12 +91,8 @@ function validateRmaItems(items) {
   for (const item of items) {
     const skuId = String(item?.sku_id || "").trim();
     const qty = Number(item?.qty);
-    if (!skuId) {
-      return { error: "Each RMA item must include sku_id" };
-    }
-    if (!Number.isFinite(qty) || qty <= 0) {
-      return { error: "Each RMA item must include qty greater than 0" };
-    }
+    if (!skuId) return { error: "Each RMA item must include sku_id" };
+    if (!Number.isFinite(qty) || qty <= 0) return { error: "Each RMA item must include qty greater than 0" };
   }
 
   return {
@@ -142,10 +130,13 @@ router.post("/", (req, res) => {
     return res.status(400).json({ message: payload.error });
   }
 
+  const userId = req.user_id || "USR000001";
+  const warehouseId = req.headers["x-warehouse-id"] || null;
+
   const created = createReturn({
     tenantId: req.tenant_id,
-    warehouseId: req.session.warehouse_id,
-    userId: req.session.user_id,
+    userId,
+    warehouseId,
     shipmentId: payload.shipmentId,
     customerId: payload.customerId,
     customerName: payload.customerName,
@@ -158,7 +149,7 @@ router.post("/", (req, res) => {
 
   recordAuditEvent({
     tenant_id: req.tenant_id,
-    user_id: req.session.user_id,
+    user_id: userId,
     entity_type: "return",
     entity_id: created.return_id,
     action: "create",
@@ -213,13 +204,15 @@ router.patch("/:returnId/cancel", (req, res) => {
     });
   }
 
+  const userId = req.user_id || "USR000001";
   const now = new Date().toISOString();
+
   const updated = updateReturn(req.tenant_id, req.params.returnId, (current) => ({
     ...current,
     status: "cancelled",
     cancellation_reason_code: validation.cancellationReasonCode,
     cancellation_reason: validation.cancellationReason,
-    cancelled_by: req.session.user_id,
+    cancelled_by: userId,
     cancelled_at: now,
     updated_at: now,
     tenant_id: req.tenant_id,
@@ -227,7 +220,7 @@ router.patch("/:returnId/cancel", (req, res) => {
 
   recordStatusTransitionAudit({
     tenant_id: req.tenant_id,
-    user_id: req.session.user_id,
+    user_id: userId,
     entity_type: "return",
     entity_id: record.return_id,
     from_status: record.status,
@@ -241,6 +234,55 @@ router.patch("/:returnId/cancel", (req, res) => {
     document: toReturnSummary(updated, req.tenant_id),
   });
 });
+
+router.patch("/:returnId/transition", (req, res) => {
+  const action = String(req.body?.action || "").trim();
+  if (!action) {
+    return res.status(400).json({ message: "action is required" });
+  }
+
+  const transition = RETURN_TRANSITION_MAP[action];
+  if (!transition) {
+    return res.status(400).json({ message: `Invalid action: ${action}` });
+  }
+
+  const record = getReturn(req.tenant_id, req.params.returnId);
+  if (!record) {
+    return res.status(404).json({ message: "Return not found" });
+  }
+
+  if (record.status !== transition.from) {
+    return res.status(409).json({
+      message: `Cannot ${action} return from ${record.status} status`,
+    });
+  }
+
+  const userId = req.user_id || "USR000001";
+  const now = new Date().toISOString();
+
+  const updated = updateReturn(req.tenant_id, req.params.returnId, (current) => ({
+    ...current,
+    status: transition.to,
+    updated_at: now,
+  }));
+
+  recordStatusTransitionAudit({
+    tenant_id: req.tenant_id,
+    user_id: userId,
+    entity_type: "return",
+    entity_id: record.return_id,
+    from_status: record.status,
+    to_status: transition.to,
+    action,
+  });
+
+  return res.json({
+    success: true,
+    message: `Return ${action}ed successfully`,
+    document: toReturnSummary(updated, req.tenant_id),
+  });
+});
+
 
 router.post("/:returnId/rma", (req, res) => {
   if (!canCreateRma(req.role_id)) {
@@ -272,15 +314,17 @@ router.post("/:returnId/rma", (req, res) => {
     return res.status(400).json({ message: validatedItems.error });
   }
 
+  const userId = req.user_id || "USR000001";
+  const now = new Date().toISOString();
+
   const creation = createRma({
     tenantId: req.tenant_id,
-    userId: req.session.user_id,
+    userId,
     returnRecord,
     notes: String(req.body?.notes || "").trim(),
     items: validatedItems.data,
   });
 
-  const now = new Date().toISOString();
   const shouldMarkCreated = returnRecord.status !== "created";
   const updatedReturn = updateReturn(req.tenant_id, returnRecord.return_id, (current) => ({
     ...current,
@@ -291,7 +335,7 @@ router.post("/:returnId/rma", (req, res) => {
   if (shouldMarkCreated) {
     recordStatusTransitionAudit({
       tenant_id: req.tenant_id,
-      user_id: req.session.user_id,
+      user_id: userId,
       entity_type: "return",
       entity_id: returnRecord.return_id,
       from_status: returnRecord.status,
@@ -302,7 +346,7 @@ router.post("/:returnId/rma", (req, res) => {
 
   recordAuditEvent({
     tenant_id: req.tenant_id,
-    user_id: req.session.user_id,
+    user_id: userId,
     entity_type: "rma",
     entity_id: creation.rma.rma_id,
     action: "create",

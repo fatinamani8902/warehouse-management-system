@@ -3,7 +3,6 @@ import { Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import { ConfirmModal } from "@/components/shared/ConfirmModal";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,19 +12,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
   confirmPacking,
-  createPackingCarton,
   fetchPackingOptions,
   fetchPackingOrderById,
   fetchPackingOrders,
-  generatePackingLabel,
   toSessionContext,
 } from "@/services/api";
 
-const initialFilters = {
-  search: "",
-  status: "",
-  pickListId: "",
-};
+const initialFilters = { search: "", status: "" };
 
 const roleAliases = {
   superadmin: "superadmin",
@@ -40,19 +33,44 @@ const roleAliases = {
   readonly: "readonly",
 };
 
+const STATUS_CONFIG = {
+  draft:              { bg: "#F1EFE8", color: "#5F5E5A", label: "Draft" },
+  carton_generated:   { bg: "#DBEAFE", color: "#1E40AF", label: "Carton Generated" },
+  packed:             { bg: "#D1FAE5", color: "#065F46", label: "Packed" },
+  shipped:            { bg: "#D1FAE5", color: "#065F46", label: "Shipped" },
+  // pick list statuses
+  pending:            { bg: "#F1EFE8", color: "#5F5E5A", label: "Pending" },
+  picking:            { bg: "#FEF3C7", color: "#92400E", label: "Picking" },
+  completed:          { bg: "#D1FAE5", color: "#065F46", label: "Completed" },
+  cancelled:          { bg: "#F3F4F6", color: "#6B7280", label: "Cancelled" },
+};
+
+function StatusBadge({ status }) {
+  const key = String(status || "").toLowerCase().replace(/ /g, "_");
+  const cfg = STATUS_CONFIG[key] || { bg: "#F1EFE8", color: "#5F5E5A", label: status || "-" };
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center",
+      fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 20,
+      background: cfg.bg, color: cfg.color, whiteSpace: "nowrap",
+    }}>
+      {cfg.label}
+    </span>
+  );
+}
+
 function normalizeRole(roleId) {
   return roleAliases[String(roleId || "readonly").toLowerCase()] || "readonly";
 }
 
 function formatDateTime(value) {
-  if (!value) {
-    return "-";
-  }
+  if (!value) return "-";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return "-";
-  }
-  return parsed.toLocaleString();
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleString("en-GB", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
 }
 
 function isPositiveNumber(value) {
@@ -69,7 +87,10 @@ const PackingPage = () => {
     () => ["superadmin", "hqadmin", "storemanager", "storeoperator", "auditor", "readonly"].includes(roleId),
     [roleId],
   );
-  const canManage = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
+  const canManage = useMemo(
+    () => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId),
+    [roleId],
+  );
 
   const [filters, setFilters] = useState(initialFilters);
   const [page, setPage] = useState(1);
@@ -87,10 +108,17 @@ const PackingPage = () => {
   const [confirmPackOpen, setConfirmPackOpen] = useState(false);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
-  const canConfirmPack = useMemo(() => isPositiveNumber(weightKg), [weightKg]);
+  const canConfirmPack = useMemo(
+    () => isPositiveNumber(weightKg) && Boolean(packagingType),
+    [weightKg, packagingType],
+  );
   const isPickListCompleted = useMemo(
     () => String(selectedOrder?.pick_list_status || "").toLowerCase() === "completed",
     [selectedOrder?.pick_list_status],
+  );
+  const isAlreadyPacked = useMemo(
+    () => ["packed", "shipped"].includes(String(selectedOrder?.status || "").toLowerCase()),
+    [selectedOrder?.status],
   );
 
   const loadList = useCallback(async () => {
@@ -100,22 +128,15 @@ const PackingPage = () => {
       setLoading(false);
       return;
     }
-
     try {
       setLoading(true);
       setError("");
-      const result = await fetchPackingOrders(session, {
-        page,
-        pageSize,
-        ...filters,
-      });
-      const items = Array.isArray(result?.items) ? result.items : [];
+      const result = await fetchPackingOrders(session, { page, pageSize, ...filters });
+      const items = Array.isArray(result?.data) ? result.data : [];
       setRows(items);
       setTotal(Number(result?.total || 0));
       setSelectedPackId((current) => {
-        if (current && items.some((item) => item.pack_id === current)) {
-          return current;
-        }
+        if (current && items.some((item) => item.pack_id === current)) return current;
         return items[0]?.pack_id || "";
       });
     } catch (loadError) {
@@ -132,10 +153,9 @@ const PackingPage = () => {
       setSelectedOrder(null);
       return;
     }
-
     try {
-      const detail = await fetchPackingOrderById(session, packId);
-      setSelectedOrder(detail || null);
+      const res = await fetchPackingOrderById(session, packId);
+      setSelectedOrder(res?.data ?? res ?? null);
     } catch (detailError) {
       setSelectedOrder(null);
       setError(detailError.message || "Failed to load pack order details");
@@ -149,24 +169,15 @@ const PackingPage = () => {
     }
     try {
       const result = await fetchPackingOptions(session);
-      const options = Array.isArray(result?.packaging_types) ? result.packaging_types : [];
-      setPackagingTypes(options);
-    } catch (_error) {
+      setPackagingTypes(Array.isArray(result?.packaging_types) ? result.packaging_types : []);
+    } catch {
       setPackagingTypes([]);
     }
   }, [canView, session]);
 
-  useEffect(() => {
-    loadList();
-  }, [loadList]);
-
-  useEffect(() => {
-    loadOptions();
-  }, [loadOptions]);
-
-  useEffect(() => {
-    loadDetail(selectedPackId);
-  }, [selectedPackId, loadDetail]);
+  useEffect(() => { loadList(); }, [loadList]);
+  useEffect(() => { loadOptions(); }, [loadOptions]);
+  useEffect(() => { loadDetail(selectedPackId); }, [selectedPackId, loadDetail]);
 
   useEffect(() => {
     if (!selectedOrder) {
@@ -180,16 +191,11 @@ const PackingPage = () => {
 
   const refreshData = async (packId = selectedPackId) => {
     await loadList();
-    if (packId) {
-      await loadDetail(packId);
-    }
+    if (packId) await loadDetail(packId);
   };
 
   const updateFilter = (key, value) => {
-    setFilters((current) => ({
-      ...current,
-      [key]: value,
-    }));
+    setFilters((current) => ({ ...current, [key]: value }));
     setPage(1);
   };
 
@@ -198,77 +204,22 @@ const PackingPage = () => {
     setPage(1);
   };
 
-  const handleCreateCarton = async () => {
-    if (!selectedOrder || !canManage) {
-      return;
-    }
-    if (!packagingType) {
-      setError("Packaging type is required before creating carton");
-      return;
-    }
-
-    try {
-      setBusyAction("create-carton");
-      setError("");
-      const result = await createPackingCarton(session, selectedOrder.pack_id, {
-        packaging_type: packagingType,
-      });
-      toast({
-        title: "Carton created",
-        description: result?.message || `Carton created for ${selectedOrder.pack_id}`,
-      });
-      await refreshData(selectedOrder.pack_id);
-    } catch (actionError) {
-      const message = actionError.message || "Unable to create carton";
-      setError(message);
-      toast({ title: "Create carton failed", description: message, variant: "destructive" });
-    } finally {
-      setBusyAction("");
-    }
-  };
-
-  const handleGenerateLabel = async () => {
-    if (!selectedOrder || !canManage) {
-      return;
-    }
-
-    try {
-      setBusyAction("generate-label");
-      setError("");
-      const payload = isPositiveNumber(weightKg) ? { weight_kg: Number(weightKg) } : {};
-      const result = await generatePackingLabel(session, selectedOrder.pack_id, payload);
-      toast({
-        title: "Carton label generated",
-        description: result?.message || `Label generated for ${selectedOrder.pack_id}`,
-      });
-      await refreshData(selectedOrder.pack_id);
-    } catch (actionError) {
-      const message = actionError.message || "Unable to generate carton label";
-      setError(message);
-      toast({ title: "Generate label failed", description: message, variant: "destructive" });
-    } finally {
-      setBusyAction("");
-    }
-  };
-
   const handleConfirmPacking = async () => {
-    if (!selectedOrder || !canManage) {
-      return;
-    }
+    if (!selectedOrder || !canManage) return;
     if (!canConfirmPack) {
-      setError("Weight must be a positive number before confirming packing");
+      setError("Packaging type and weight are required before confirming packing");
       return;
     }
-
     try {
       setBusyAction("confirm-pack");
       setError("");
-      const result = await confirmPacking(session, selectedOrder.pack_id, {
+      await confirmPacking(session, selectedOrder.pack_id, {
         weight_kg: Number(weightKg),
+        packaging_type: packagingType,
       });
       toast({
         title: "Packing confirmed",
-        description: result?.message || `Pack order ${selectedOrder.pack_id} marked as packed`,
+        description: `Pack order ${selectedOrder.pack_id} marked as packed`,
       });
       setConfirmPackOpen(false);
       await refreshData(selectedOrder.pack_id);
@@ -284,31 +235,23 @@ const PackingPage = () => {
   return (
     <AppLayout>
       <Breadcrumbs items={[{ label: "Packing" }]} />
-      <h1 className="text-2xl font-bold mb-2">Packing</h1>
-      <p className="mb-4 text-sm text-muted-foreground">
-        Packing portal is scan-free. Item scanning and pick verification remain mobile-owned.
-      </p>
+      <h1 className="text-2xl font-bold mb-4">Packing</h1>
 
-      {error && (
-        <p className="mb-3 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
 
+      {/* Filter bar — same pattern as other pages */}
       <Card className="mb-4">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <CardContent className="pt-4">
+          <div className="flex flex-wrap gap-2">
             <Input
-              placeholder="Search Pack ID / Pick List / Carton / Status"
+              className="h-9 min-w-[220px] flex-1"
+              placeholder="Search Pack ID, Pick List, Carton..."
               value={filters.search}
-              onChange={(event) => updateFilter("search", event.target.value)}
+              onChange={(e) => updateFilter("search", e.target.value)}
             />
-            <Select value={filters.status || "all"} onValueChange={(value) => updateFilter("status", value === "all" ? "" : value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
+            <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v === "all" ? "" : v)}>
+              <SelectTrigger className="h-9 w-[160px]">
+                <SelectValue placeholder="All Statuses" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
@@ -318,18 +261,14 @@ const PackingPage = () => {
                 <SelectItem value="shipped">Shipped</SelectItem>
               </SelectContent>
             </Select>
-            <Input
-              placeholder="Pick List ID"
-              value={filters.pickListId}
-              onChange={(event) => updateFilter("pickListId", event.target.value)}
-            />
-          </div>
-          <div className="mt-3">
-            <Button variant="outline" onClick={clearFilters}>Clear</Button>
+
+            <Button variant="outline" className="h-9" onClick={clearFilters}>Clear</Button>
+            <Button variant="outline" className="h-9" onClick={loadList} disabled={loading}>Refresh</Button>
           </div>
         </CardContent>
       </Card>
 
+      {/* Table */}
       <Card>
         <CardContent className="pt-4">
           <div className="rounded-md border overflow-hidden">
@@ -357,7 +296,6 @@ const PackingPage = () => {
                     </td>
                   </tr>
                 )}
-
                 {!loading && rows.length === 0 && (
                   <tr>
                     <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
@@ -365,7 +303,6 @@ const PackingPage = () => {
                     </td>
                   </tr>
                 )}
-
                 {!loading && rows.map((row) => (
                   <tr
                     key={row.pack_id}
@@ -374,7 +311,9 @@ const PackingPage = () => {
                   >
                     <td className="px-3 py-2 font-mono text-xs">{row.pack_id}</td>
                     <td className="px-3 py-2">{row.pick_list_id || "-"}</td>
-                    <td className="px-3 py-2">{row.pick_list_status ? <StatusBadge status={row.pick_list_status} /> : "-"}</td>
+                    <td className="px-3 py-2">
+                      {row.pick_list_status ? <StatusBadge status={row.pick_list_status} /> : <span className="text-muted-foreground">-</span>}
+                    </td>
                     <td className="px-3 py-2">{row.carton_id || "-"}</td>
                     <td className="px-3 py-2">{row.packaging_type || "-"}</td>
                     <td className="px-3 py-2">{row.weight_kg ?? "-"}</td>
@@ -388,36 +327,25 @@ const PackingPage = () => {
 
           <div className="mt-3 flex items-center justify-between gap-2 text-sm">
             <div className="text-muted-foreground">
-              {total} result{total === 1 ? "" : "s"} | Page {page} of {totalPages}
+              {total} result{total === 1 ? "" : "s"} · Page {page} of {totalPages}
             </div>
             <div className="flex items-center gap-2">
-              <Select
-                value={String(pageSize)}
-                onValueChange={(value) => {
-                  setPageSize(Number(value));
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="h-8 w-[92px]">
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+                <SelectTrigger className="h-8 w-[92px]"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="10">10 / page</SelectItem>
                   <SelectItem value="20">20 / page</SelectItem>
                   <SelectItem value="50">50 / page</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
-                Prev
-              </Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>
-                Next
-              </Button>
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
+              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Detail panel */}
       {selectedOrder && (
         <Card className="mt-4">
           <CardHeader className="pb-2">
@@ -427,97 +355,107 @@ const PackingPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-              <div>
-                <p className="text-xs text-muted-foreground">Pick List</p>
-                <p>{selectedOrder.pick_list_id || "-"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Pick List Status</p>
-                <p>{selectedOrder.pick_list_status ? <StatusBadge status={selectedOrder.pick_list_status} /> : "Unknown"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Carton ID</p>
-                <p>{selectedOrder.carton_id || "-"}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Label Generated</p>
-                <p>{formatDateTime(selectedOrder.label_generated_at)}</p>
+            {/* Info grid */}
+            <div className="rounded-md border bg-muted/20 px-4 py-3">
+              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm md:grid-cols-4">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Pick List</p>
+                  <p className="font-medium">{selectedOrder.pick_list_id || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Pick List Status</p>
+                  {selectedOrder.pick_list_status
+                    ? <StatusBadge status={selectedOrder.pick_list_status} />
+                    : <p className="text-muted-foreground">-</p>}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Carton ID</p>
+                  <p>{selectedOrder.carton_id || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-0.5">Packed At</p>
+                  <p>{formatDateTime(selectedOrder.packed_at)}</p>
+                </div>
               </div>
             </div>
 
-            {!isPickListCompleted && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                Packing can start only when linked Pick List status is COMPLETED.
+            {/* Pack station controls */}
+            {!isAlreadyPacked && (
+              <>
+                {!isPickListCompleted && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    Packing can start only when linked Pick List status is COMPLETED.
+                  </div>
+                )}
+
+                <div className="rounded-md border p-4 space-y-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground" style={{ fontSize: 11, letterSpacing: "0.07em" }}>
+                    Pack Station Controls
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="packaging-type" className="text-xs text-muted-foreground">
+                        Packaging Type <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={packagingType || "none"}
+                        onValueChange={(v) => setPackagingType(v === "none" ? "" : v)}
+                        disabled={!canManage || busyAction !== ""}
+                      >
+                        <SelectTrigger id="packaging-type">
+                          <SelectValue placeholder="Select packaging type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Select packaging type</SelectItem>
+                          {packagingTypes.map((item) => (
+                            <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="weight-kg" className="text-xs text-muted-foreground">
+                        Weight (kg) <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="weight-kg"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={weightKg}
+                        onChange={(e) => setWeightKg(e.target.value)}
+                        disabled={!canManage || busyAction !== ""}
+                        placeholder="e.g. 2.5"
+                      />
+                    </div>
+                  </div>
+                  <div className="border-t pt-3">
+                    <Button
+                      size="sm"
+                      onClick={() => setConfirmPackOpen(true)}
+                      disabled={!canManage || !isPickListCompleted || busyAction !== "" || !canConfirmPack}
+                    >
+                      {busyAction === "confirm-pack" ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Confirming...
+                        </span>
+                      ) : "Confirm Packing"}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {isAlreadyPacked && (
+              <div className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                This pack order is <strong>{selectedOrder.status}</strong> — ready for shipping.
               </div>
             )}
 
-            <div className="rounded-md border p-3">
-              <p className="text-sm font-medium mb-3">Pack Station Controls</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="packaging-type">Packaging Type</Label>
-                  <Select
-                    value={packagingType || "none"}
-                    onValueChange={(value) => setPackagingType(value === "none" ? "" : value)}
-                    disabled={!canManage || busyAction !== ""}
-                  >
-                    <SelectTrigger id="packaging-type" className="mt-1">
-                      <SelectValue placeholder="Select packaging type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Select packaging type</SelectItem>
-                      {packagingTypes.map((item) => (
-                        <SelectItem key={item.value} value={item.value}>
-                          {item.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="weight-kg">Weight (kg)</Label>
-                  <Input
-                    id="weight-kg"
-                    className="mt-1"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={weightKg}
-                    onChange={(event) => setWeightKg(event.target.value)}
-                    disabled={!canManage || busyAction !== ""}
-                    placeholder="Enter carton weight"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleCreateCarton}
-                  disabled={!canManage || !isPickListCompleted || busyAction !== ""}
-                >
-                  {busyAction === "create-carton" ? "Creating..." : "Create Carton"}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleGenerateLabel}
-                  disabled={!canManage || !isPickListCompleted || busyAction !== ""}
-                >
-                  {busyAction === "generate-label" ? "Generating..." : "Generate Carton Label"}
-                </Button>
-                <Button
-                  onClick={() => setConfirmPackOpen(true)}
-                  disabled={!canManage || !isPickListCompleted || busyAction !== "" || !canConfirmPack}
-                >
-                  Confirm Packing
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-md border overflow-hidden">
-              <table className="w-full text-xs md:text-sm">
+            {/* Lines table */}
+            <div className="overflow-hidden rounded-md border">
+              <table className="w-full text-sm">
                 <thead className="bg-muted/60">
                   <tr>
                     <th className="px-3 py-2 text-left">Line</th>
@@ -535,7 +473,7 @@ const PackingPage = () => {
                     <tr key={`${selectedOrder.pack_id}-${line.line_no}`} className="border-t">
                       <td className="px-3 py-2">{line.line_no}</td>
                       <td className="px-3 py-2">{line.sku_id}</td>
-                      <td className="px-3 py-2">{line.qty}</td>
+                      <td className="px-3 py-2">{line.qty_required ?? line.qty}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -550,7 +488,9 @@ const PackingPage = () => {
         onClose={() => setConfirmPackOpen(false)}
         onConfirm={handleConfirmPacking}
         title="Confirm Packing"
-        description={selectedOrder ? `Confirm pack order ${selectedOrder.pack_id} as PACKED? This action is irreversible.` : "Confirm packing"}
+        description={selectedOrder
+          ? `Confirm pack order ${selectedOrder.pack_id} as PACKED? This action cannot be undone.`
+          : "Confirm packing"}
         confirmLabel={busyAction === "confirm-pack" ? "Confirming..." : "Confirm Pack"}
         cancelLabel="Back"
         variant="default"

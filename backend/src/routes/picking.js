@@ -1,88 +1,86 @@
 import express from "express";
-import { requireRole } from "../middlewares/auth.js";
+import {
+  listPickLists,
+  getPickList,
+  updatePickListStatusBySource,
+} from "../data/store.js";
 
 const router = express.Router();
 
-// ==============================
-// STUB DATA
-// ==============================
-const pickLists = [
-  {
-    pick_list_id: "PCK000001",
-    wave_id: "WAVE001",
-    assigned_to_user_id: "USR00001",
-    assigned_to_user_name: "Picker 1",
-    status: "open",
-    priority: "normal",
-    lines_count: 3,
-    warehouse_id: "WH001",
-    tenantId: "TEN001",
-    created_at: new Date().toISOString(),
-  }
-];
-
-// ==============================
 // LIST PICK LISTS
-// ==============================
-router.get("/pick-lists", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    data: pickLists
-  });
+router.get("/pick-lists", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const result = listPickLists({
+      tenantId,
+      warehouseId,
+      page: Number(req.query.page) || 1,
+      pageSize: Number(req.query.pageSize) || 10,
+      search: req.query.search || "",
+      status: req.query.status || "",
+      waveId: req.query.wave_id || "",
+      assignedUser: req.query.assigned_user || "",
+    });
+
+    res.json({
+      success: true,
+      data: result.items,
+      total: result.total,
+      page: result.page,
+      pageSize: result.pageSize,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-// ==============================
 // GET PICK LIST DETAIL
-// ==============================
-router.get("/pick-lists/:pickListId", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      ...pickLists[0],
-      pick_list_id: req.params.pickListId,
-      lines: [
-        {
-          line_no: 1,
-          sku_id: "ITEM001",
-          location_id: "A1",
-          qty_required: 10,
-          qty_picked: 0,
-          status: "open"
-        }
-      ]
+router.get("/pick-lists/:pickListId", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+
+    const pickList = getPickList(tenantId, req.params.pickListId, warehouseId);
+    if (!pickList) {
+      return res.status(404).json({ success: false, message: "Pick list not found" });
     }
-  });
+
+    res.json({ success: true, data: pickList });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-// ==============================
-// UPDATE PICK STATUS
-// ==============================
-router.post("/pick-lists/:pickListId/status", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: `Pick list ${req.params.pickListId} updated successfully`,
-    status: req.body.status || "updated"
-  });
-});
+// UPDATE PICK LIST STATUS
+router.post("/pick-lists/:pickListId/status", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const warehouseId = req.headers["x-warehouse-id"] || null;
+    const { status, source } = req.body;
 
-// ==============================
-// EXECUTE PICK (Stub)
-// ==============================
-router.post("/pick-lists/:pickListId/execute", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: `Pick list ${req.params.pickListId} executed successfully`
-  });
-});
+    if (!status) {
+      return res.status(400).json({ success: false, message: "status is required" });
+    }
 
-// ==============================
-// VERIFY ITEM (Stub)
-// ==============================
-router.post("/pick-lists/:pickListId/verify-item", requireRole(["superadmin", "hqadmin", "storemanager"]), (req, res) => {
-  res.json({
-    success: true,
-    message: `Item verified for pick list ${req.params.pickListId}`
-  });
+    const result = updatePickListStatusBySource({
+      tenantId,
+      pickListId: req.params.pickListId,
+      status,
+      source: source || "PORTAL",
+      userId: req.user_id || "USR000001",
+      warehouseId,
+    });
+
+    if (result.error) {
+      return res.status(400).json({ success: false, message: result.error });
+    }
+
+    res.json({ success: true, data: result.data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 export default router;

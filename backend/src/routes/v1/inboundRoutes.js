@@ -1,193 +1,103 @@
 import express from "express";
-import * as masterDataService from "../../services/masterDataService.js";
+import {
+  listAsns,
+  getAsn,
+  createAsn,
+  updateAsn,
+  listGrns,
+  getGrn,
+  createGrn,
+  updateGrn
+} from "../../data/store.js";
 
 const router = express.Router();
-
-/* =======================================
-   STUB DATA
-======================================= */
-
-const inboundStub = [
-  // ASN
-  {
-    asn_id: "ASN000001",
-    supplier_name: "ABC Supplier",
-    created_at: new Date().toISOString(),
-    eta: "2026-03-10",
-    lines_count: 3,
-    status: "draft",
-    cancellation_reason: null,
-  },
-  {
-    asn_id: "ASN000002",
-    supplier_name: "XYZ Trading",
-    created_at: new Date().toISOString(),
-    eta: "2026-03-12",
-    lines_count: 5,
-    status: "pending",
-    cancellation_reason: null,
-  },
-
-  // GRN
-  {
-    grn_id: "GRN000001",
-    asn_id: "ASN000001",
-    supplier_name: "ABC Supplier",
-    created_at: new Date().toISOString(),
-    received_date: "2026-03-05",
-    status: "receiving",
-    lines: [
-      { line_no: 1, sku_id: "SKU001", expected_qty: 10, received_qty: 8 },
-    ],
-    cancellation_reason: null,
-  },
-  {
-    grn_id: "GRN000002",
-    asn_id: "ASN000002",
-    supplier_name: "XYZ Trading",
-    created_at: new Date().toISOString(),
-    received_date: "2026-03-06",
-    status: "completed",
-    lines: [
-      { line_no: 1, sku_id: "SKU002", expected_qty: 5, received_qty: 5 },
-    ],
-    cancellation_reason: null,
-  },
-];
-
-/* =======================================
-   HELPER - PAGINATION
-======================================= */
-
-function paginate(array, page = 1, pageSize = 10) {
-  const currentPage = Number(page) || 1;
-  const size = Number(pageSize) || 10;
-
-  const total = array.length;
-  const totalPages = Math.ceil(total / size);
-
-  const start = (currentPage - 1) * size;
-  const end = start + size;
-
-  const items = array.slice(start, end);
-
-  return {
-    items,
-    pagination: {
-      page: currentPage,
-      pageSize: size,
-      total,
-      totalPages,
-    },
-  };
-}
 
 /* =======================================
    ASN ROUTES
 ======================================= */
 
 router.get("/asn", (req, res) => {
-  const { page = 1, pageSize = 10 } = req.query;
-
-  const asnList = inboundStub.filter((i) => i.asn_id);
-
-  const { items, pagination } = paginate(asnList, page, pageSize);
-
-  res.json({
-    success: true,
-    data: items,
-    meta: {
-      pagination,
-    },
-  });
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const asns = listAsns(tenantId);
+    res.json({ success: true, data: asns });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 router.get("/asn/:id", (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      type: "asn",
-      tenantId: "TEN001",
-      status: "CREATED",
-      createdAt: new Date().toISOString(),
-    },
-  });
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const asn = getAsn(tenantId, req.params.id);
+    if (!asn) return res.status(404).json({ success: false, message: "ASN not found" });
+    res.json({ success: true, data: asn });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 router.post("/asn", (req, res) => {
-
-  const supplierId = req.body.supplier_id;
-
-// cari supplier dalam master data
-const supplier = masterDataService.getResource(
-  req.context,
-  "suppliers",
-  supplierId
-);
-
-const supplierName = supplier ? supplier.supplier_name : `Supplier ${supplierId}`;
-
-const asnCount = inboundStub.filter(i => i.asn_id).length + 1;
-
-const newAsn = {
-  asn_id: `ASN${String(asnCount).padStart(6, "0")}`,
-  supplier_id: supplierId,
-  supplier_name: supplierName,
-    created_at: new Date().toISOString(),
-    eta: req.body.eta,
-    lines_count: req.body.lines_count,
-    status: "draft",
-    cancellation_reason: null,
-  };
-
-  inboundStub.push(newAsn);
-
-  res.json({
-    success: true,
-    data: newAsn
-  });
-
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const result = createAsn({
+      tenantId,
+      warehouseId: req.body.warehouse_id || null,
+      userId: "USR000001",
+      supplierId: req.body.supplier_id,
+      eta: req.body.eta,
+      notes: req.body.notes,
+      linesCount: req.body.lines_count
+    });
+    if (result.error) return res.status(400).json({ success: false, message: result.error });
+    res.json({ success: true, data: result.data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
-router.put("/asn/:id", (req, res) => {
-  res.json({
-    success: true,
-    message: "ASN updated successfully",
-    data: {
-      id: req.params.id,
-      ...req.body,
-    },
-  });
-});
+/* =======================================
+   ASN TRANSITIONS
+======================================= */
 
-router.delete("/asn/:id", (req, res) => {
+const ASN_TRANSITIONS = {
+  "submit":            { from: ["draft"],                          to: "pending" },
+  "mark-in-transit":   { from: ["pending"],                        to: "in_transit" },
+  "mark_in_transit":   { from: ["pending"],                        to: "in_transit" },
+  "mark-arrived":      { from: ["pending", "in_transit"],          to: "arrived" },
+  "mark_arrived":      { from: ["pending", "in_transit"],          to: "arrived" },
+  "close":             { from: ["arrived"],                        to: "closed" },
+  "cancel":            { from: ["draft", "pending", "in_transit"], to: "cancelled" },
+};
 
-  const index = inboundStub.findIndex(i => i.asn_id === req.params.id);
+router.post("/asn/:id/:action", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const { id, action } = req.params;
 
-  if (index === -1) {
-    return res.status(404).json({
-      success: false,
-      message: "ASN not found"
-    });
+    const transition = ASN_TRANSITIONS[action];
+    if (!transition) return res.status(400).json({ success: false, message: `Unknown action: ${action}` });
+
+    const asn = getAsn(tenantId, id);
+    if (!asn) return res.status(404).json({ success: false, message: "ASN not found" });
+
+    if (!transition.from.includes(asn.status)) {
+      return res.status(400).json({ success: false, message: `Cannot ${action} ASN with status '${asn.status}'` });
+    }
+
+    const updated = updateAsn(tenantId, id, (current) => ({
+      ...current,
+      status: transition.to,
+      cancellation_reason: action === "cancel" ? (req.body.cancellation_reason || req.body.reason || null) : current.cancellation_reason,
+      cancelled_by: action === "cancel" ? "USR000001" : current.cancelled_by,
+      cancelled_at: action === "cancel" ? new Date().toISOString() : current.cancelled_at,
+      updated_at: new Date().toISOString(),
+    }));
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const asn = inboundStub[index];
-
-  if (asn.status !== "draft") {
-    return res.status(400).json({
-      success: false,
-      message: "Only Draft ASN can be deleted"
-    });
-  }
-
-  inboundStub.splice(index, 1);
-
-  res.json({
-    success: true,
-    message: `ASN ${req.params.id} deleted successfully`
-  });
-
 });
 
 /* =======================================
@@ -195,233 +105,122 @@ router.delete("/asn/:id", (req, res) => {
 ======================================= */
 
 router.get("/grn", (req, res) => {
-  const { page = 1, pageSize = 10 } = req.query;
-
-  const grnList = inboundStub.filter((i) => i.grn_id);
-
-  const { items, pagination } = paginate(grnList, page, pageSize);
-
-  res.json({
-    success: true,
-    data: items,
-    meta: {
-      pagination,
-    },
-  });
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const grns = listGrns(tenantId);
+    res.json({ success: true, data: grns });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 router.get("/grn/:id", (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      id: req.params.id,
-      type: "grn",
-      tenantId: "TEN001",
-      status: "RECEIVED",
-      createdAt: new Date().toISOString(),
-    },
-  });
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const grn = getGrn(tenantId, req.params.id);
+    if (!grn) return res.status(404).json({ success: false, message: "GRN not found" });
+    res.json({ success: true, data: grn });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 router.post("/grn", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const { asn_id } = req.body;
+    if (!asn_id) return res.status(400).json({ success: false, message: "asn_id is required" });
 
-  const asn = inboundStub.find(i => i.asn_id === req.body.asn_id);
+    const asn = getAsn(tenantId, asn_id);
+    if (!asn) return res.status(400).json({ success: false, message: "ASN not found" });
 
-  if (!asn) {
-    return res.status(400).json({
-      success: false,
-      message: "ASN not found"
+    const result = createGrn({
+      tenantId,
+      warehouseId: asn.warehouse_id || null,
+      userId: "USR000001",
+      asnId: asn.asn_id
     });
+    if (result.error) return res.status(400).json({ success: false, message: result.error });
+    res.json({ success: true, data: result.data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const grnCount = inboundStub.filter(i => i.grn_id).length + 1;
-
-  const newGrn = {
-  grn_id: `GRN${String(grnCount).padStart(6, "0")}`,
-  asn_id: asn.asn_id,
-  supplier_name: asn.supplier_name,
-  created_at: new Date().toISOString(),
-  received_date: req.body.received_date,
-  status: "draft",
-  lines: [],
-  notes: req.body.notes || null,
-  cancellation_reason: null
-};
-
-  inboundStub.push(newGrn);
-
-  res.json({
-    success: true,
-    data: newGrn
-  });
-
-});
-
-router.put("/grn/:id", (req, res) => {
-  res.json({
-    success: true,
-    message: "GRN updated successfully",
-    data: {
-      id: req.params.id,
-      ...req.body,
-    },
-  });
-});
-
-router.delete("/grn/:id", (req, res) => {
-  res.json({
-    success: true,
-    message: `GRN ${req.params.id} deleted successfully`,
-  });
 });
 
 /* =======================================
-   PROGRESS & CANCEL (STUB)
+   GRN TRANSITIONS
 ======================================= */
 
-router.post("/asn/:id/submit", (req, res) => {
-
-  const asn = inboundStub.find(i => i.asn_id === req.params.id);
-
-  if (!asn) {
-    return res.status(404).json({
-      success: false,
-      message: "ASN not found"
-    });
-  }
-
-  asn.status = "pending";
-
-  res.json({
-    success: true,
-    data: asn
-  });
-
-});
-
-
-
-router.post("/asn/:id/:action", (req, res) => {
-
-  const asn = inboundStub.find(i => i.asn_id === req.params.id);
-
-  if (!asn) {
-    return res.status(404).json({ message: "ASN not found" });
-  }
-
-  const action = req.params.action;
-
-  if (action === "submit") {
-    asn.status = "pending";
-  }
-
-  if (action === "mark_in_transit") {
-    asn.status = "in_transit";
-  }
-
-  if (action === "mark_arrived") {
-    asn.status = "arrived";
-  }
-
-  if (action === "close") {
-    asn.status = "closed";
-  }
-
-  if (action === "cancel") {
-  asn.status = "cancelled";
-  asn.cancellation_reason = req.body?.cancellation_reason || null;
-}
-
-  res.json({
-    success: true,
-    data: asn
-  });
-
-});
-
-router.post("/grn/:id/progress", (req, res) => {
-  res.json({
-    success: true,
-    message: `GRN ${req.params.id} progressed successfully`,
-  });
-});
-
-router.post("/asn/:id/cancel", (req, res) => {
-
-  const asn = inboundStub.find(i => i.asn_id === req.params.id);
-
-  if (!asn) {
-    return res.status(404).json({
-      success: false,
-      message: "ASN not found"
-    });
-  }
-
-  asn.status = "cancelled";
-asn.cancellation_reason = req.body?.cancellation_reason ?? "Cancelled by user";
-
-  res.json({
-    success: true,
-    data: asn
-  });
-
-});
-
-router.post("/grn/:id/cancel", (req, res) => {
-
-  const grn = inboundStub.find(i => i.grn_id === req.params.id);
-
-  if (!grn) {
-    return res.status(404).json({
-      success: false,
-      message: "GRN not found"
-    });
-  }
-
-  grn.status = "cancelled";
-  grn.cancellation_reason = req.body?.cancellation_reason || null;
-
-  res.json({
-    success: true,
-    data: grn
-  });
-
-});
+const GRN_TRANSITIONS = {
+  "start_receiving": { from: ["draft"],      to: "receiving" },
+  "complete":        { from: ["receiving"],  to: "completed" },
+  "post":            { from: ["completed"],  to: "posted" },
+  "cancel":          { from: ["draft", "receiving", "completed"], to: "cancelled" },
+};
 
 router.post("/grn/:id/:action", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const { id, action } = req.params;
 
-  const grn = inboundStub.find(i => i.grn_id === req.params.id);
+    const transition = GRN_TRANSITIONS[action];
+    if (!transition) return res.status(400).json({ success: false, message: `Unknown action: ${action}` });
 
-  if (!grn) {
-    return res.status(404).json({
-      success: false,
-      message: "GRN not found"
-    });
+    const grn = getGrn(tenantId, id);
+    if (!grn) return res.status(404).json({ success: false, message: "GRN not found" });
+
+    if (!transition.from.includes(grn.status)) {
+      return res.status(400).json({ success: false, message: `Cannot ${action} GRN with status '${grn.status}'` });
+    }
+
+    const updated = updateGrn(tenantId, id, (current) => ({
+      ...current,
+      status: transition.to,
+      cancellation_reason: action === "cancel" ? (req.body.cancellation_reason || req.body.reason || null) : current.cancellation_reason,
+      cancelled_by: action === "cancel" ? "USR000001" : current.cancelled_by,
+      cancelled_at: action === "cancel" ? new Date().toISOString() : current.cancelled_at,
+      updated_at: new Date().toISOString(),
+    }));
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
-
-  const action = req.params.action;
-
-  if (action === "start_receiving") {
-    grn.status = "receiving";
-  }
-
-  if (action === "complete") {
-    grn.status = "completed";
-  }
-
-  if (action === "post") {
-    grn.status = "posted";
-  }
-
-  if (action === "cancel") {
-    grn.status = "cancelled";
-    grn.cancellation_reason = req.body?.cancellation_reason || null;
-  }
-
-  res.json({
-    success: true,
-    data: grn
-  });
-
 });
+
+router.patch("/grn/:id/lines", (req, res) => {
+  try {
+    const tenantId = req.context?.tenantId || "TNT000001";
+    const { lines } = req.body;
+
+    if (!Array.isArray(lines)) {
+      return res.status(400).json({ success: false, message: "lines must be an array" });
+    }
+
+    const grn = getGrn(tenantId, req.params.id);
+    if (!grn) return res.status(404).json({ success: false, message: "GRN not found" });
+
+    if (grn.status !== "receiving") {
+      return res.status(400).json({ success: false, message: "GRN must be in receiving status to update lines" });
+    }
+
+    const updated = updateGrn(tenantId, req.params.id, (current) => ({
+      ...current,
+      lines: current.lines.map((line) => {
+        const incoming = lines.find((l) => l.line_no === line.line_no);
+        if (!incoming) return line;
+        return {
+          ...line,
+          received_qty: Number(incoming.received_qty) ?? line.received_qty,
+        };
+      }),
+      updated_at: new Date().toISOString(),
+    }));
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 export default router;

@@ -38,6 +38,7 @@ export default function CreateASN({ session, onCreated, onCancel }) {
 
     try {
       setSubmitting(true);
+      console.log("FINAL SUPPLIER ID:", supplierId);
       const created = await createAsn(session, {
         supplier_id: supplierId,
         eta,
