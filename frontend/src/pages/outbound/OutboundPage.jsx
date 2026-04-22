@@ -14,12 +14,10 @@ import { canCreateOutbound, canReleaseOutbound, canCancelOutbound } from "@/serv
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const ACCENT       = "#3b5bdb";
 const ACCENT_LIGHT = "#eef2ff";
-
-// Text hierarchy — all dark enough to read clearly
-const T_PRIMARY   = "#111827"; // main content
-const T_SECONDARY = "#374151"; // supporting — dates, IDs, lines
-const T_LABEL     = "#6b7280"; // field labels, column headers — NOT too light
-const T_MUTED     = "#9ca3af"; // only for truly optional info like "—"
+const T_PRIMARY    = "#111827";
+const T_SECONDARY  = "#374151";
+const T_LABEL      = "#6b7280";
+const T_MUTED      = "#9ca3af";
 
 // ── Status pill ───────────────────────────────────────────────────────────────
 const STATUS_CFG = {
@@ -37,12 +35,12 @@ function StatusPill({ status }) {
   const c = STATUS_CFG[key] || STATUS_CFG.draft;
   return (
     <span style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 20,
+      display: "inline-flex", alignItems: "center", gap: 6,
+      fontSize: 13, fontWeight: 500, padding: "4px 12px", borderRadius: 20,
       background: c.bg, color: c.color, border: `0.5px solid ${c.border}`,
       whiteSpace: "nowrap",
     }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
       {c.label}
     </span>
   );
@@ -50,9 +48,10 @@ function StatusPill({ status }) {
 
 // ── Button styles ─────────────────────────────────────────────────────────────
 const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", fontFamily: "inherit", border: "none" };
-const btnNeutral = { ...btnBase, height: 32, padding: "0 12px", borderRadius: 7, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
-const btnPrimary = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: ACCENT, color: "#fff" };
-const btnDanger  = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: "#e03131", color: "#fff" };
+const btnNeutral = { ...btnBase, height: 34, padding: "0 14px", borderRadius: 7, fontSize: 14, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnPrimary = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, fontWeight: 500, background: ACCENT, color: "#fff" };
+const btnDanger  = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, fontWeight: 500, background: "#e03131", color: "#fff" };
+const btnOutline = { ...btnBase, height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const SKU_OPTIONS = [
@@ -66,9 +65,9 @@ const SKU_OPTIONS = [
 const orderFlow = ["draft", "released", "picking", "packed", "shipped", "completed"];
 
 function formatDateTime(value) {
-  if (!value) return "-";
+  if (!value) return "—";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
+  if (Number.isNaN(parsed.getTime())) return "—";
   return parsed.toLocaleString("en-GB", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -87,15 +86,15 @@ function toStepperSteps(currentStatus) {
   });
 }
 
-// Field in detail panel
+// DetailField — matches InboundPage exactly
 function DetailField({ label, value, danger, span }) {
   return (
     <div style={span ? { gridColumn: "1 / -1" } : {}}>
-      <p style={{ fontSize: 11, fontWeight: 600, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 3 }}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
         {label}
       </p>
-      <p style={{ fontSize: 13, fontWeight: 500, color: danger ? "#991b1b" : T_PRIMARY }}>
-        {value || "-"}
+      <p style={{ fontSize: 14, fontWeight: 500, color: danger ? "#991b1b" : T_PRIMARY }}>
+        {value ?? "—"}
       </p>
     </div>
   );
@@ -180,6 +179,7 @@ export default function OutboundPage() {
 
   const confirmCancel = () => {
     if (!cancelReason.trim()) { setCancelError("Cancellation reason is required"); return; }
+    if (cancelReason.trim().length < 5) { setCancelError("Reason must be at least 5 characters"); return; }
     setOrders((prev) => prev.map((o) =>
       o.order_id === cancelTarget ? { ...o, status: "cancelled", cancellation_reason: cancelReason.trim() } : o
     ));
@@ -227,14 +227,14 @@ export default function OutboundPage() {
               <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
             </svg>
             <input
-              style={{ width: "100%", height: 32, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 28px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+              style={{ width: "100%", height: 34, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 14, color: T_PRIMARY, outline: "none", background: "#fff" }}
               placeholder="Search Order ID, Customer…"
               value={filters.search}
               onChange={(e) => updateFilter("search", e.target.value)}
             />
           </div>
           <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v === "all" ? "" : v)}>
-            <SelectTrigger style={{ height: 32, width: 160, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+            <SelectTrigger style={{ height: 34, width: 175, fontSize: 14, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -258,8 +258,8 @@ export default function OutboundPage() {
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#fafbff" }}>
-              {["Order ID", "Customer", "Created", "Lines", "Status", "Cancellation Reason"].map((h) => (
-                <th key={h} style={{ padding: "9px 16px", textAlign: "left", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
+              {["Order ID", "Customer", "Created", "Lines", "Status"].map((h) => (
+                <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
                   {h}
                 </th>
               ))}
@@ -267,10 +267,10 @@ export default function OutboundPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={6} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>Loading orders…</td></tr>
+              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>Loading orders…</td></tr>
             )}
             {!loading && pagedOrders.length === 0 && (
-              <tr><td colSpan={6} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>No orders found.</td></tr>
+              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>No orders found.</td></tr>
             )}
             {!loading && pagedOrders.map((row) => {
               const isSel = selectedOrderId === row.order_id;
@@ -280,33 +280,24 @@ export default function OutboundPage() {
                   style={{ cursor: "pointer", background: isSel ? ACCENT_LIGHT : "transparent", borderBottom: "0.5px solid #f0f0f0" }}
                   onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#f5f7ff"; }}
                   onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
-                  onClick={() => setSelectedOrderId(row.order_id)}
+                  onClick={() => setSelectedOrderId((prev) => prev === row.order_id ? "" : row.order_id)}
                 >
-                  {/* Order ID — dark, readable, no indigo */}
-                  <td style={{ padding: "12px 16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: T_SECONDARY }}>
+                  <td style={{ padding: "14px 16px" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: T_SECONDARY }}>
                       {row.order_id}
                     </span>
                   </td>
-                  {/* Customer — darkest */}
-                  <td style={{ padding: "12px 16px", fontSize: 13, fontWeight: 500, color: T_PRIMARY }}>
-                    {row.customer_name || row.customer || "-"}
+                  <td style={{ padding: "14px 16px", fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>
+                    {row.customer_name || row.customer || "—"}
                   </td>
-                  {/* Date — secondary dark, not too light */}
-                  <td style={{ padding: "12px 16px", fontSize: 12, color: T_SECONDARY }}>
+                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>
                     {formatDateTime(row.created_at || row.createdAt)}
                   </td>
-                  {/* Lines — secondary */}
-                  <td style={{ padding: "12px 16px", fontSize: 13, color: T_SECONDARY }}>
+                  <td style={{ padding: "14px 16px", fontSize: 14, color: T_SECONDARY }}>
                     {row.lines_count || 0}
                   </td>
-                  {/* Status pill */}
-                  <td style={{ padding: "12px 16px" }}>
+                  <td style={{ padding: "14px 16px" }}>
                     <StatusPill status={row.status} />
-                  </td>
-                  {/* Cancellation reason — only grey if empty "—" */}
-                  <td style={{ padding: "12px 16px", fontSize: 12, color: row.cancellation_reason ? T_SECONDARY : T_MUTED }}>
-                    {row.cancellation_reason || "—"}
                   </td>
                 </tr>
               );
@@ -316,12 +307,12 @@ export default function OutboundPage() {
 
         {/* Pagination */}
         <div style={{ padding: "10px 16px", borderTop: "0.5px solid #eef0fc", background: "#fafbff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 12, color: T_SECONDARY }}>
+          <span style={{ fontSize: 13, color: T_SECONDARY }}>
             {filteredOrders.length} result{filteredOrders.length === 1 ? "" : "s"} · Page {page} of {totalPages}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
-              <SelectTrigger style={{ height: 28, width: 100, fontSize: 12, border: "0.5px solid #d1d5db", borderRadius: 5, color: T_PRIMARY }}>
+              <SelectTrigger style={{ height: 30, width: 110, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 5, color: T_PRIMARY }}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -335,7 +326,7 @@ export default function OutboundPage() {
               { label: "Next", disabled: page >= totalPages, onClick: () => setPage((p) => p + 1) },
             ].map((b) => (
               <button key={b.label} disabled={b.disabled} onClick={b.onClick}
-                style={{ ...btnNeutral, height: 28, padding: "0 10px", fontSize: 12, opacity: b.disabled ? 0.4 : 1, cursor: b.disabled ? "not-allowed" : "pointer" }}>
+                style={{ ...btnOutline, opacity: b.disabled ? 0.4 : 1, cursor: b.disabled ? "not-allowed" : "pointer" }}>
                 {b.label}
               </button>
             ))}
@@ -349,7 +340,7 @@ export default function OutboundPage() {
 
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: T_PRIMARY }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: T_PRIMARY }}>
                   {selectedOrder.order_id}
                 </span>
                 <StatusPill status={selectedOrder.status} />
@@ -377,7 +368,7 @@ export default function OutboundPage() {
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
                       {[["SKU", "left"], ["Ordered Qty", "right"], ["Picked Qty", "right"]].map(([h, align]) => (
-                        <th key={h} style={{ padding: "8px 14px", textAlign: align, fontSize: 11, fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", color: T_LABEL }}>
+                        <th key={h} style={{ padding: "9px 14px", textAlign: align, fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: T_LABEL }}>
                           {h}
                         </th>
                       ))}
@@ -385,17 +376,17 @@ export default function OutboundPage() {
                   </thead>
                   <tbody>
                     {(selectedOrder.lines || []).length === 0 && (
-                      <tr><td colSpan={3} style={{ padding: "20px 14px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>No line items yet.</td></tr>
+                      <tr><td colSpan={3} style={{ padding: "20px 14px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>No line items yet.</td></tr>
                     )}
                     {(selectedOrder.lines || []).map((line) => (
                       <tr key={`${selectedOrder.order_id}-${line.sku_id}`} style={{ borderTop: "0.5px solid #f0f0f0" }}>
-                        <td style={{ padding: "10px 14px", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 500, color: T_SECONDARY }}>
+                        <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, color: T_SECONDARY }}>
                           {line.sku_id}
                         </td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 13, fontWeight: 500, color: T_PRIMARY }}>
+                        <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>
                           {line.ordered_qty}
                         </td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 13, fontWeight: 500, color: line.picked_qty > 0 ? T_PRIMARY : T_SECONDARY }}>
+                        <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 14, fontWeight: 500, color: line.picked_qty > 0 ? T_PRIMARY : T_SECONDARY }}>
                           {line.picked_qty || 0}
                         </td>
                       </tr>
@@ -409,7 +400,7 @@ export default function OutboundPage() {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {canRelease && (
                     <button
-                      style={{ ...btnPrimary, height: 34, padding: "0 16px", opacity: !selectedOrder.lines_count ? 0.5 : 1, cursor: !selectedOrder.lines_count ? "not-allowed" : "pointer" }}
+                      style={{ ...btnPrimary, opacity: !selectedOrder.lines_count ? 0.5 : 1, cursor: !selectedOrder.lines_count ? "not-allowed" : "pointer" }}
                       disabled={!selectedOrder.lines_count}
                       onClick={() => handleRelease(selectedOrder.order_id)}
                     >
@@ -417,16 +408,13 @@ export default function OutboundPage() {
                     </button>
                   )}
                   {canRelease && (
-                    <button
-                      style={{ ...btnNeutral, height: 34, padding: "0 14px", fontSize: 13 }}
-                      onClick={() => { setSkuForm({ sku_id: "", qty: "" }); setSkuError(""); setShowAddSku(true); }}
-                    >
+                    <button style={btnNeutral} onClick={() => { setSkuForm({ sku_id: "", qty: "" }); setSkuError(""); setShowAddSku(true); }}>
                       + Add SKU Line
                     </button>
                   )}
                   {canCancel && (
                     <button
-                      style={{ ...btnDanger, height: 34, padding: "0 16px" }}
+                      style={btnDanger}
                       onClick={() => { setCancelTarget(selectedOrder.order_id); setCancelReason(""); setCancelError(""); }}
                     >
                       Cancel Order
@@ -463,7 +451,7 @@ export default function OutboundPage() {
                 value={skuForm.qty}
                 onChange={(e) => { setSkuError(""); setSkuForm((p) => ({ ...p, qty: e.target.value })); }}
                 placeholder="Enter quantity"
-                style={{ width: "100%", height: 36, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 13, color: T_PRIMARY, outline: "none" }}
+                style={{ width: "100%", height: 36, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 14, color: T_PRIMARY, outline: "none" }}
               />
             </div>
             {skuError && <p style={{ fontSize: 12, color: "#991b1b" }}>{skuError}</p>}
@@ -481,14 +469,14 @@ export default function OutboundPage() {
           <DialogHeader><DialogTitle>Cancel Order</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <p style={{ fontSize: 13, color: T_SECONDARY }}>
-              Are you sure you want to cancel order <strong style={{ color: T_PRIMARY }}>{cancelTarget}</strong>?
+              Are you sure you want to cancel order <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{cancelTarget}</strong>? This action cannot be undone.
             </p>
             <div className="space-y-1">
-              <Label>Cancellation Reason</Label>
+              <Label>Cancellation Reason <span style={{ color: "#e03131" }}>*</span></Label>
               <Textarea
                 value={cancelReason}
                 onChange={(e) => { setCancelError(""); setCancelReason(e.target.value); }}
-                placeholder="Please provide the reason for cancellation"
+                placeholder="Please provide the reason for cancellation (min. 5 characters)"
                 rows={3}
               />
             </div>

@@ -1,23 +1,31 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ShieldAlert, Download, X, FileSearch, ArrowLeft, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toSessionContext, fetchAuditOptions, fetchAuditLogs } from "@/services/api";
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const ACCENT       = "#3b5bdb";
+const ACCENT_LIGHT = "#eef2ff";
+const T_PRIMARY    = "#111827";
+const T_SECONDARY  = "#374151";
+const T_LABEL      = "#6b7280";
+const T_MUTED      = "#9ca3af";
+
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 32, padding: "0 12px", borderRadius: 7, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnOutline = { ...btnBase, height: 30, padding: "0 10px", borderRadius: 6, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const cardStyle  = { background: "#fff", borderRadius: 12, border: "0.5px solid #e8ebf8", overflow: "hidden", boxShadow: "0 2px 10px rgba(59,91,219,.07)" };
+const thStyle    = { padding: "9px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap", background: "#fafbff" };
+
 const PAGE_SIZE = 20;
 
 const USER_NAMES = {
-  USR000001: "John Admin",
-  USR000002: "Sarah Manager",
-  USR000003: "Mike Operator",
-  USR000004: "Lisa Operator",
-  USR000005: "HQ Admin",
-  USR100001: "Tenant2 Manager",
+  USR000001: "John Admin",    USR000002: "Sarah Manager",
+  USR000003: "Mike Operator", USR000004: "Lisa Operator",
+  USR000005: "HQ Admin",      USR100001: "Tenant2 Manager",
 };
 
 const BADGE_VARIANTS = {
@@ -43,38 +51,25 @@ const RISK_VARIANTS = {
   Low:    { bg: "#EAF3DE", color: "#27500A" },
 };
 
-// ── utils ─────────────────────────────────────────────────────────────────────
-
-function resolveUserName(userId) {
-  return USER_NAMES[userId] || userId;
-}
+// ── Utils (unchanged) ─────────────────────────────────────────────────────────
+function resolveUserName(userId) { return USER_NAMES[userId] || userId; }
 
 function resolveUserIdsFromSearch(searchTerm) {
   if (!searchTerm) return [];
   const q = searchTerm.toLowerCase();
-  return Object.entries(USER_NAMES)
-    .filter(([, name]) => name.toLowerCase().includes(q))
-    .map(([id]) => id);
+  return Object.entries(USER_NAMES).filter(([, name]) => name.toLowerCase().includes(q)).map(([id]) => id);
 }
 
 function formatDateTime(ts) {
   if (!ts) return "—";
-  try {
-    return new Date(ts).toLocaleString("en-MY", {
-      day: "numeric", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch { return ts; }
+  try { return new Date(ts).toLocaleString("en-MY", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
+  catch { return ts; }
 }
 
 function formatDateTimeFull(ts) {
   if (!ts) return "—";
-  try {
-    return new Date(ts).toLocaleString("en-MY", {
-      day: "numeric", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
-  } catch { return ts; }
+  try { return new Date(ts).toLocaleString("en-MY", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+  catch { return ts; }
 }
 
 function clientFilter(logs, search) {
@@ -84,8 +79,7 @@ function clientFilter(logs, search) {
   return logs.filter((l) => {
     const userName = resolveUserName(l.user_id).toLowerCase();
     return (
-      userName.includes(q) ||
-      matchingUserIds.includes(l.user_id) ||
+      userName.includes(q) || matchingUserIds.includes(l.user_id) ||
       String(l.entity_id   || "").toLowerCase().includes(q) ||
       String(l.entity_type || "").toLowerCase().includes(q) ||
       String(l.action      || "").toLowerCase().includes(q) ||
@@ -96,18 +90,11 @@ function clientFilter(logs, search) {
   });
 }
 
-// ── small components ───────────────────────────────────────────────────────────
-
+// ── Small components ──────────────────────────────────────────────────────────
 function ActionBadge({ action }) {
-  const key = String(action || "").toLowerCase();
-  const s   = BADGE_VARIANTS[key] || { bg: "#F1EFE8", color: "#444441" };
+  const s = BADGE_VARIANTS[String(action || "").toLowerCase()] || { bg: "#F1EFE8", color: "#444441" };
   return (
-    <span style={{
-      fontSize: 12, padding: "3px 10px", borderRadius: 20,
-      background: s.bg, color: s.color,
-      whiteSpace: "nowrap", textTransform: "capitalize",
-      fontWeight: 500, letterSpacing: "0.01em",
-    }}>
+    <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: s.bg, color: s.color, whiteSpace: "nowrap", textTransform: "capitalize", fontWeight: 500, letterSpacing: "0.01em" }}>
       {action}
     </span>
   );
@@ -116,10 +103,7 @@ function ActionBadge({ action }) {
 function RiskBadge({ risk }) {
   const s = RISK_VARIANTS[risk] || RISK_VARIANTS.Low;
   return (
-    <span style={{
-      fontSize: 12, padding: "3px 10px", borderRadius: 20,
-      background: s.bg, color: s.color, whiteSpace: "nowrap", fontWeight: 500,
-    }}>
+    <span style={{ fontSize: 12, padding: "3px 10px", borderRadius: 20, background: s.bg, color: s.color, whiteSpace: "nowrap", fontWeight: 500 }}>
       {risk}
     </span>
   );
@@ -129,18 +113,12 @@ function UserAvatar({ userId }) {
   const name     = resolveUserName(userId);
   const initials = name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
   const palette  = [
-    { bg: "#DBEAFE", color: "#1E40AF" },
-    { bg: "#D1FAE5", color: "#065F46" },
-    { bg: "#EDE9FE", color: "#5B21B6" },
-    { bg: "#FEF3C7", color: "#92400E" },
+    { bg: "#DBEAFE", color: "#1E40AF" }, { bg: "#D1FAE5", color: "#065F46" },
+    { bg: "#EDE9FE", color: "#5B21B6" }, { bg: "#FEF3C7", color: "#92400E" },
   ];
   const c = palette[(userId ? userId.charCodeAt(3) : 0) % palette.length];
   return (
-    <div title={userId} style={{
-      width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      fontSize: 11, fontWeight: 600, background: c.bg, color: c.color,
-    }}>
+    <div title={userId} style={{ width: 28, height: 28, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600, background: c.bg, color: c.color }}>
       {initials}
     </div>
   );
@@ -148,34 +126,17 @@ function UserAvatar({ userId }) {
 
 function SectionLabel({ children }) {
   return (
-    <p style={{
-      fontSize: 11, fontWeight: 600, letterSpacing: "0.08em",
-      textTransform: "uppercase", color: "var(--color-text-tertiary)",
-      marginBottom: 8, paddingBottom: 6,
-      borderBottom: "0.5px solid var(--color-border-tertiary)",
-    }}>
+    <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: T_LABEL, marginBottom: 8, paddingBottom: 6, borderBottom: "0.5px solid #eef0fc" }}>
       {children}
     </p>
   );
 }
 
-// FIX: alignItems flex-start + paddingTop on label so label aligns with
-// first line of multi-line or avatar content
 function DetailRow({ label, children }) {
   return (
-    <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "flex-start",
-      padding: "8px 0", fontSize: 13,
-      borderBottom: "0.5px solid var(--color-border-tertiary)",
-    }}>
-      <span style={{
-        color: "var(--color-text-tertiary)",
-        minWidth: 110, flexShrink: 0,
-        paddingTop: 2, // nudge label down to align with first line of content
-      }}>
-        {label}
-      </span>
-      <span style={{ textAlign: "right", color: "var(--color-text-primary)" }}>{children}</span>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "8px 0", fontSize: 13, borderBottom: "0.5px solid #f0f0f0" }}>
+      <span style={{ color: T_LABEL, minWidth: 110, flexShrink: 0, paddingTop: 2 }}>{label}</span>
+      <span style={{ textAlign: "right", color: T_PRIMARY }}>{children}</span>
     </div>
   );
 }
@@ -184,26 +145,13 @@ function EmptyState({ hasFilters }) {
   return (
     <tr>
       <td colSpan={7}>
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center",
-          justifyContent: "center", padding: "4rem 0", gap: 12,
-        }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: "50%",
-            background: "var(--color-background-secondary)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <FileSearch size={20} style={{ color: "var(--color-text-tertiary)" }} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "4rem 0", gap: 12 }}>
+          <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#f9fafb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <FileSearch size={20} style={{ color: T_MUTED }} />
           </div>
           <div style={{ textAlign: "center" }}>
-            <p style={{ fontSize: 14, fontWeight: 500, color: "var(--color-text-secondary)" }}>
-              {hasFilters ? "No events match your filters" : "No audit events yet"}
-            </p>
-            <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", marginTop: 4 }}>
-              {hasFilters
-                ? "Try adjusting or clearing your filters"
-                : "Events appear here when users perform actions in the system"}
-            </p>
+            <p style={{ fontSize: 14, fontWeight: 500, color: T_SECONDARY }}>{hasFilters ? "No events match your filters" : "No audit events yet"}</p>
+            <p style={{ fontSize: 13, color: T_MUTED, marginTop: 4 }}>{hasFilters ? "Try adjusting or clearing your filters" : "Events appear here when users perform actions in the system"}</p>
           </div>
         </div>
       </td>
@@ -211,138 +159,68 @@ function EmptyState({ hasFilters }) {
   );
 }
 
-// ── entity timeline ───────────────────────────────────────────────────────────
-
+// ── Entity timeline (unchanged logic) ────────────────────────────────────────
 function EntityTimeline({ entityId, entityType, allLogs, onBack }) {
   const events = useMemo(() =>
-    allLogs
-      .filter((l) => l.entity_id === entityId)
-      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)),
+    allLogs.filter((l) => l.entity_id === entityId).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)),
     [allLogs, entityId],
   );
 
   return (
-    <div style={{
-      background: "var(--color-background-primary)",
-      border: "0.5px solid var(--color-border-tertiary)",
-      borderRadius: 12, overflow: "hidden", marginTop: 16,
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "12px 20px",
-        background: "var(--color-background-secondary)",
-        borderBottom: "0.5px solid var(--color-border-tertiary)",
-      }}>
+    <div style={{ ...cardStyle, marginTop: 16 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", background: "#fafbff", borderBottom: "0.5px solid #eef0fc" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            onClick={onBack}
-            style={{
-              display: "flex", alignItems: "center", gap: 4,
-              fontSize: 13, color: "var(--color-text-secondary)",
-              background: "none", border: "none", cursor: "pointer", padding: 0,
-            }}
-          >
+          <button onClick={onBack} style={{ ...btnBase, height: "auto", padding: 0, fontSize: 13, color: T_SECONDARY, background: "none" }}>
             <ArrowLeft size={14} /> Back to event detail
           </button>
-          <div style={{ width: 1, height: 14, background: "var(--color-border-secondary)" }} />
+          <div style={{ width: 1, height: 14, background: "#e5e7eb" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 500 }}>Timeline for</span>
-            <code style={{
-              fontSize: 13, padding: "2px 8px", borderRadius: 6,
-              background: "var(--color-background-primary)",
-              border: "0.5px solid var(--color-border-secondary)",
-              color: "var(--color-text-info)",
-            }}>
-              {entityId}
-            </code>
-            <span style={{ fontSize: 13, color: "var(--color-text-tertiary)", textTransform: "capitalize" }}>
-              ({entityType})
-            </span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>Timeline for</span>
+            <code style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#fff", border: "0.5px solid #e5e7eb", color: ACCENT }}>{entityId}</code>
+            <span style={{ fontSize: 13, color: T_MUTED, textTransform: "capitalize" }}>({entityType})</span>
           </div>
         </div>
-        <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-          {events.length} event{events.length !== 1 ? "s" : ""}
-        </span>
+        <span style={{ fontSize: 13, color: T_MUTED }}>{events.length} event{events.length !== 1 ? "s" : ""}</span>
       </div>
 
       <div style={{ padding: "20px 24px" }}>
         {events.length === 0 ? (
-          <p style={{ fontSize: 13, color: "var(--color-text-tertiary)", textAlign: "center", padding: "2rem 0" }}>
-            No events recorded for this entity
-          </p>
+          <p style={{ fontSize: 13, color: T_MUTED, textAlign: "center", padding: "2rem 0" }}>No events recorded for this entity</p>
         ) : (
           <div style={{ position: "relative" }}>
-            <div style={{
-              position: "absolute", left: 10, top: 10, bottom: 10,
-              width: 1, background: "var(--color-border-tertiary)",
-            }} />
+            <div style={{ position: "absolute", left: 10, top: 10, bottom: 10, width: 1, background: "#e5e7eb" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
               {events.map((ev, idx) => {
-                const isFirst       = idx === 0;
-                const isLast        = idx === events.length - 1;
+                const isFirst = idx === 0, isLast = idx === events.length - 1;
                 const hasTransition = ev.from_status || ev.to_status;
-                const isNewRecord   = !ev.from_status && ev.to_status;
+                const isNewRecord = !ev.from_status && ev.to_status;
                 return (
                   <div key={ev.audit_id} style={{ display: "flex", gap: 16, position: "relative" }}>
-                    <div style={{
-                      width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-                      background: isFirst ? "#D1FAE5" : isLast ? "#DBEAFE" : "var(--color-background-secondary)",
-                      border: `2px solid ${isFirst ? "#059669" : isLast ? "#3B82F6" : "var(--color-border-secondary)"}`,
-                      display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1,
-                    }}>
-                      <div style={{
-                        width: 6, height: 6, borderRadius: "50%",
-                        background: isFirst ? "#059669" : isLast ? "#3B82F6" : "var(--color-text-tertiary)",
-                      }} />
+                    <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, background: isFirst ? "#D1FAE5" : isLast ? "#DBEAFE" : "#f9fafb", border: `2px solid ${isFirst ? "#059669" : isLast ? "#3B82F6" : "#e5e7eb"}`, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: "50%", background: isFirst ? "#059669" : isLast ? "#3B82F6" : T_MUTED }} />
                     </div>
-
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
                         <ActionBadge action={ev.action} />
                         <RiskBadge risk={ev.risk} />
-                        <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-                          {formatDateTime(ev.timestamp)}
-                        </span>
+                        <span style={{ fontSize: 13, color: T_MUTED }}>{formatDateTime(ev.timestamp)}</span>
                       </div>
-
-                      {ev.message && (
-                        <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 6 }}>
-                          {ev.message}
-                        </p>
-                      )}
-
+                      {ev.message && <p style={{ fontSize: 13, color: T_SECONDARY, marginBottom: 6 }}>{ev.message}</p>}
                       {hasTransition && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                           {isNewRecord ? (
-                            <>
-                              <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Created as</span>
-                              <span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#D1FAE5", color: "#065F46" }}>
-                                {ev.to_status}
-                              </span>
-                            </>
+                            <><span style={{ fontSize: 13, color: T_MUTED }}>Created as</span><span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#D1FAE5", color: "#065F46" }}>{ev.to_status}</span></>
                           ) : (
-                            <>
-                              <span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#FEE2E2", color: "#991B1B" }}>
-                                {ev.from_status}
-                              </span>
-                              <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>→</span>
-                              <span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#D1FAE5", color: "#065F46" }}>
-                                {ev.to_status}
-                              </span>
-                            </>
+                            <><span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#FEE2E2", color: "#991B1B" }}>{ev.from_status}</span><span style={{ fontSize: 13, color: T_MUTED }}>→</span><span style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#D1FAE5", color: "#065F46" }}>{ev.to_status}</span></>
                           )}
                         </div>
                       )}
-
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <UserAvatar userId={ev.user_id} />
-                        <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
-                          {resolveUserName(ev.user_id)}
-                        </span>
-                        <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>·</span>
-                        <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-                          {formatDateTimeFull(ev.timestamp)}
-                        </span>
+                        <span style={{ fontSize: 13, color: T_SECONDARY }}>{resolveUserName(ev.user_id)}</span>
+                        <span style={{ fontSize: 13, color: T_MUTED }}>·</span>
+                        <span style={{ fontSize: 13, color: T_MUTED }}>{formatDateTimeFull(ev.timestamp)}</span>
                       </div>
                     </div>
                   </div>
@@ -356,91 +234,47 @@ function EntityTimeline({ entityId, entityType, allLogs, onBack }) {
   );
 }
 
-// ── detail panel ──────────────────────────────────────────────────────────────
-
+// ── Detail panel (unchanged logic) ───────────────────────────────────────────
 function DetailPanel({ log, onClose, onViewTimeline }) {
   if (!log) return null;
   const hasTransition = log.from_status || log.to_status;
   const isNewRecord   = !log.from_status && log.to_status;
 
   return (
-    <div style={{
-      background: "var(--color-background-primary)",
-      border: "0.5px solid var(--color-border-tertiary)",
-      borderRadius: 12, overflow: "hidden", marginTop: 16,
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "12px 20px",
-        background: "var(--color-background-secondary)",
-        borderBottom: "0.5px solid var(--color-border-tertiary)",
-      }}>
+    <div style={{ ...cardStyle, marginTop: 16, borderTop: "2px solid #3b5bdb" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", background: "#fafbff", borderBottom: "0.5px solid #eef0fc" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <ActionBadge action={log.action} />
-          <code style={{
-            fontSize: 13, padding: "2px 8px", borderRadius: 6,
-            background: "var(--color-background-primary)",
-            border: "0.5px solid var(--color-border-secondary)",
-            color: "var(--color-text-info)",
-          }}>
-            {log.entity_id}
-          </code>
+          <code style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#fff", border: "0.5px solid #e5e7eb", color: ACCENT }}>{log.entity_id}</code>
           <RiskBadge risk={log.risk} />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button
-            onClick={onViewTimeline}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              fontSize: 13, padding: "5px 12px", borderRadius: 8, cursor: "pointer",
-              background: "var(--color-background-info)",
-              color: "var(--color-text-info)",
-              border: "0.5px solid var(--color-border-info)",
-              fontWeight: 500,
-            }}
-          >
+          <button onClick={onViewTimeline} style={{ ...btnBase, height: 30, padding: "0 12px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: ACCENT_LIGHT, color: ACCENT, border: "0.5px solid #c7d2fe" }}>
             View full timeline →
           </button>
-          <button
-            onClick={onClose}
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "var(--color-text-tertiary)" }}
-          >
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T_MUTED }}>
             <X size={16} />
           </button>
         </div>
       </div>
 
-      {/* FIX: use gap instead of padding/border trick so columns are truly equal */}
+      {/* Body — two columns */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", padding: "20px 24px", gap: 0 }}>
-
-        {/* LEFT COLUMN */}
-        <div style={{ paddingRight: 24, borderRight: "0.5px solid var(--color-border-tertiary)" }}>
+        {/* Left */}
+        <div style={{ paddingRight: 24, borderRight: "0.5px solid #eef0fc" }}>
           <SectionLabel>Event info</SectionLabel>
-          <DetailRow label="Audit ID">
-            <code style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>{log.audit_id}</code>
-          </DetailRow>
-          <DetailRow label="Timestamp">
-            <span style={{ fontSize: 13 }}>{formatDateTimeFull(log.timestamp)}</span>
-          </DetailRow>
+          <DetailRow label="Audit ID"><code style={{ fontSize: 12, color: T_SECONDARY }}>{log.audit_id}</code></DetailRow>
+          <DetailRow label="Timestamp"><span style={{ fontSize: 13 }}>{formatDateTimeFull(log.timestamp)}</span></DetailRow>
           <DetailRow label="Action"><ActionBadge action={log.action} /></DetailRow>
           <DetailRow label="Risk level"><RiskBadge risk={log.risk} /></DetailRow>
-          <DetailRow label="Entity type">
-            <span style={{ fontSize: 13, textTransform: "capitalize" }}>{log.entity_type}</span>
-          </DetailRow>
-          <DetailRow label="Entity ID">
-            <code style={{ fontSize: 13, color: "var(--color-text-info)" }}>{log.entity_id}</code>
-          </DetailRow>
-          {log.message && (
-            <DetailRow label="Message">
-              <span style={{ fontSize: 13, textAlign: "right", maxWidth: 180, lineHeight: 1.5 }}>{log.message}</span>
-            </DetailRow>
-          )}
-          {log.source && (
-            <DetailRow label="Source"><span style={{ fontSize: 13 }}>{log.source}</span></DetailRow>
-          )}
+          <DetailRow label="Entity type"><span style={{ fontSize: 13, textTransform: "capitalize" }}>{log.entity_type}</span></DetailRow>
+          <DetailRow label="Entity ID"><code style={{ fontSize: 13, color: ACCENT }}>{log.entity_id}</code></DetailRow>
+          {log.message && <DetailRow label="Message"><span style={{ fontSize: 13, textAlign: "right", maxWidth: 180, lineHeight: 1.5 }}>{log.message}</span></DetailRow>}
+          {log.source  && <DetailRow label="Source"><span style={{ fontSize: 13 }}>{log.source}</span></DetailRow>}
         </div>
 
-        {/* RIGHT COLUMN */}
+        {/* Right */}
         <div style={{ paddingLeft: 24 }}>
           <SectionLabel>Session info</SectionLabel>
           <DetailRow label="User">
@@ -449,42 +283,22 @@ function DetailPanel({ log, onClose, onViewTimeline }) {
               <span style={{ fontSize: 13, fontWeight: 500 }}>{resolveUserName(log.user_id)}</span>
             </div>
           </DetailRow>
-          <DetailRow label="User ID">
-            <code style={{ fontSize: 12, color: "var(--color-text-tertiary)" }}>{log.user_id}</code>
-          </DetailRow>
-          <DetailRow label="Tenant">
-            <code style={{ fontSize: 12 }}>{log.tenant_id}</code>
-          </DetailRow>
+          <DetailRow label="User ID"><code style={{ fontSize: 12, color: T_MUTED }}>{log.user_id}</code></DetailRow>
+          <DetailRow label="Tenant"><code style={{ fontSize: 12 }}>{log.tenant_id}</code></DetailRow>
 
           {hasTransition && (
             <div style={{ marginTop: 20 }}>
               <SectionLabel>{isNewRecord ? "Record created" : "Status transition"}</SectionLabel>
               {isNewRecord ? (
                 <DetailRow label="New record created with status">
-                  <span style={{
-                    fontSize: 13, padding: "3px 10px", borderRadius: 6,
-                    background: "#D1FAE5", color: "#065F46", fontWeight: 500,
-                    whiteSpace: "nowrap",
-                  }}>
-                    {log.to_status}
-                  </span>
+                  <span style={{ fontSize: 13, padding: "3px 10px", borderRadius: 6, background: "#D1FAE5", color: "#065F46", fontWeight: 500, whiteSpace: "nowrap" }}>{log.to_status}</span>
                 </DetailRow>
               ) : (
                 <DetailRow label="Status changed">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{
-                      fontSize: 13, padding: "3px 10px", borderRadius: 6,
-                      background: "#FEE2E2", color: "#991B1B", fontWeight: 500,
-                    }}>
-                      {log.from_status}
-                    </span>
-                    <span style={{ fontSize: 14, color: "var(--color-text-tertiary)" }}>→</span>
-                    <span style={{
-                      fontSize: 13, padding: "3px 10px", borderRadius: 6,
-                      background: "#D1FAE5", color: "#065F46", fontWeight: 500,
-                    }}>
-                      {log.to_status}
-                    </span>
+                    <span style={{ fontSize: 13, padding: "3px 10px", borderRadius: 6, background: "#FEE2E2", color: "#991B1B", fontWeight: 500 }}>{log.from_status}</span>
+                    <span style={{ fontSize: 14, color: T_MUTED }}>→</span>
+                    <span style={{ fontSize: 13, padding: "3px 10px", borderRadius: 6, background: "#D1FAE5", color: "#065F46", fontWeight: 500 }}>{log.to_status}</span>
                   </div>
                 </DetailRow>
               )}
@@ -496,11 +310,10 @@ function DetailPanel({ log, onClose, onViewTimeline }) {
   );
 }
 
-// ── main page ─────────────────────────────────────────────────────────────────
-
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AuditLogPage() {
-  const { authState } = useAuth();
-  const session       = toSessionContext(authState);
+  const { authState }  = useAuth();
+  const session        = toSessionContext(authState);
 
   const [allLogs, setAllLogs]       = useState([]);
   const [total, setTotal]           = useState(0);
@@ -520,60 +333,47 @@ export default function AuditLogPage() {
   const [dateTo, setDateTo]             = useState("");
   const [page, setPage]                 = useState(1);
 
-  const [selectedLog, setSelectedLog]         = useState(null);
-  const [timelineEntity, setTimelineEntity]   = useState(null);
+  const [selectedLog, setSelectedLog]       = useState(null);
+  const [timelineEntity, setTimelineEntity] = useState(null);
   const [hoveredEntityId, setHoveredEntityId] = useState(null);
 
   const logs = useMemo(() => clientFilter(allLogs, search), [allLogs, search]);
 
+  // ── Load options (unchanged) ──────────────────────────────────────────────
   useEffect(() => {
     if (!session?.tenant_id) return;
     setOptionsLoading(true);
     fetchAuditOptions(session)
       .then((data) => {
-        if (data) {
-          setOptions({
-            actions:  data.actions  || [],
-            entities: data.entities || [],
-            users: (data.users || []).map((uid) => ({ value: uid, label: resolveUserName(uid) })),
-          });
-        }
+        if (data) setOptions({
+          actions:  data.actions  || [],
+          entities: data.entities || [],
+          users: (data.users || []).map((uid) => ({ value: uid, label: resolveUserName(uid) })),
+        });
       })
       .catch(() => {})
       .finally(() => setOptionsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.tenant_id]);
 
+  // ── Load logs (unchanged) ─────────────────────────────────────────────────
   const loadLogs = useCallback(() => {
     if (!session?.tenant_id) return;
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     fetchAuditLogs(session, {
       page, pageSize: PAGE_SIZE,
-      action:   filterAction || undefined,
-      entity:   filterEntity || undefined,
-      risk:     filterRisk   || undefined,
-      user:     filterUser   || undefined,
-      dateFrom: dateFrom     || undefined,
-      dateTo:   dateTo       || undefined,
+      action: filterAction || undefined, entity: filterEntity || undefined,
+      risk:   filterRisk   || undefined, user:   filterUser   || undefined,
+      dateFrom: dateFrom   || undefined, dateTo: dateTo       || undefined,
     })
-      .then((data) => {
-        setAllLogs(data?.items || []);
-        setTotal(data?.total || 0);
-        setTotalPages(data?.totalPages || 1);
-      })
+      .then((data) => { setAllLogs(data?.items || []); setTotal(data?.total || 0); setTotalPages(data?.totalPages || 1); })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, filterAction, filterEntity, filterRisk, filterUser, dateFrom, dateTo, session.tenant_id]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
-
-  useEffect(() => {
-    setPage(1);
-    setSelectedLog(null);
-    setTimelineEntity(null);
-  }, [filterAction, filterEntity, filterRisk, filterUser, dateFrom, dateTo]);
+  useEffect(() => { setPage(1); setSelectedLog(null); setTimelineEntity(null); }, [filterAction, filterEntity, filterRisk, filterUser, dateFrom, dateTo]);
 
   const clearAll = () => {
     setSearch(""); setFilterAction(""); setFilterEntity("");
@@ -596,414 +396,222 @@ export default function AuditLogPage() {
   const uniqueUsers    = new Set(logs.map((l) => l.user_id)).size;
   const uniqueEntities = new Set(logs.map((l) => l.entity_type)).size;
 
-  function getRowStyle(log) {
-    const isSelected = selectedLog?.audit_id === log.audit_id;
-    return {
-      cursor: "pointer",
-      background: isSelected ? "var(--color-background-info)" : "transparent",
-      borderBottom: "0.5px solid var(--color-border-tertiary)",
-      borderLeft: log.risk === "High" ? "3px solid #E24B4A" : "3px solid transparent",
-      transition: "background 0.12s ease",
-    };
-  }
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
       <Breadcrumbs items={[{ label: "Audit Log" }]} />
 
-      {/* page header */}
+      {/* Page header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 600, color: "var(--color-text-primary)", margin: 0 }}>
-            Audit Log
-          </h1>
-          <p style={{ fontSize: 14, color: "var(--color-text-tertiary)", marginTop: 4 }}>
-            Complete activity trail — restricted to superadmin and hqadmin
-          </p>
+          <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Audit Log</h1>
+          <p style={{ fontSize: 13, color: T_SECONDARY }}>Complete activity trail — restricted to superadmin and hqadmin</p>
         </div>
-        <Button size="sm" variant="outline" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Download size={14} /> Export
-        </Button>
+        <button style={btnNeutral} onClick={() => {}}>
+          <Download size={13} /> Export
+        </button>
       </div>
 
-      {/* info bar — FIX: alignItems center so icon stays vertically centred with text */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        padding: "10px 16px", borderRadius: 8, marginBottom: 16,
-        background: "var(--color-background-secondary)",
-        border: "0.5px solid var(--color-border-tertiary)",
-        fontSize: 13, color: "var(--color-text-secondary)",
-      }}>
-        <ShieldAlert size={15} style={{ flexShrink: 0, color: "var(--color-text-tertiary)" }} />
-        PII data is masked in exported logs. Sensitive operations are flagged for compliance review.
-        Logs are retained for 12 months.
+      {/* Info bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, marginBottom: 16, background: "#fffbeb", border: "0.5px solid #fde68a", fontSize: 13, color: "#92400e" }}>
+        <ShieldAlert size={15} style={{ flexShrink: 0, color: "#d97706" }} />
+        PII data is masked in exported logs. Sensitive operations are flagged for compliance review. Logs are retained for 12 months.
       </div>
 
-      {/* filter card — CSS grid so "Search" label and "Filter by" label share the same left edge,
-           and inputs in col 2 are flush-left with each other */}
-      <div style={{
-        background: "var(--color-background-primary)",
-        border: "0.5px solid var(--color-border-tertiary)",
-        borderRadius: 12, padding: "16px 20px", marginBottom: 16,
-      }}>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "max-content 1fr",
-          alignItems: "center",
-          rowGap: 10,
-          columnGap: 12,
-        }}>
-          {/* row 1: search + date */}
-          <span style={{ fontSize: 13, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>Search</span>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8,
-              border: "0.5px solid var(--color-border-secondary)",
-              borderRadius: 8, padding: "0 12px", height: 36,
-              background: "var(--color-background-secondary)", flex: 1, maxWidth: 300,
-            }}>
-              <Search size={13} style={{ color: "var(--color-text-tertiary)", flexShrink: 0 }} />
+      {/* Filter card */}
+      <div style={{ ...cardStyle, marginBottom: 16, overflow: "visible" }}>
+        <div style={{ padding: "14px 16px", background: "#fafbff", borderBottom: "0.5px solid #eef0fc" }}>
+          {/* Row 1 — search + dates */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+              <Search size={13} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: T_MUTED, flexShrink: 0 }} />
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name, entity ID, action..."
-                style={{
-                  border: "none", outline: "none", background: "transparent",
-                  fontSize: 13, color: "var(--color-text-primary)", width: "100%",
-                }}
+                value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, entity ID, action…"
+                style={{ width: "100%", height: 32, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 28px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
               />
-              {search && (
-                <X size={12} style={{ cursor: "pointer", color: "var(--color-text-tertiary)", flexShrink: 0 }}
-                  onClick={() => setSearch("")} />
-              )}
+              {search && <X size={12} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: T_MUTED }} onClick={() => setSearch("")} />}
             </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 13, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>From</span>
-              <input
-                type="date" value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                style={{
-                  fontSize: 13, height: 36, padding: "0 10px", borderRadius: 8,
-                  border: "0.5px solid var(--color-border-secondary)",
-                  background: "var(--color-background-secondary)",
-                  color: "var(--color-text-primary)",
-                }}
-              />
-              <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>To</span>
-              <input
-                type="date" value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                style={{
-                  fontSize: 13, height: 36, padding: "0 10px", borderRadius: 8,
-                  border: "0.5px solid var(--color-border-secondary)",
-                  background: "var(--color-background-secondary)",
-                  color: "var(--color-text-primary)",
-                }}
-              />
-            </div>
-
+            <span style={{ fontSize: 13, color: T_MUTED }}>From</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              style={{ fontSize: 13, height: 32, padding: "0 10px", borderRadius: 7, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY }} />
+            <span style={{ fontSize: 13, color: T_MUTED }}>To</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              style={{ fontSize: 13, height: 32, padding: "0 10px", borderRadius: 7, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY }} />
+            <div style={{ flex: 1 }} />
             {hasFilters && (
-              <button
-                onClick={clearAll}
-                style={{
-                  marginLeft: "auto", fontSize: 13, color: "var(--color-text-tertiary)",
-                  background: "none", border: "none", cursor: "pointer", textDecoration: "underline",
-                }}
-              >
+              <button onClick={clearAll} style={{ ...btnBase, height: "auto", padding: 0, fontSize: 13, color: T_MUTED, background: "none", textDecoration: "underline" }}>
                 Clear all
               </button>
             )}
           </div>
 
-          {/* row 2: dropdowns */}
-          <span style={{ fontSize: 13, color: "var(--color-text-tertiary)", whiteSpace: "nowrap" }}>Filter by</span>
+          {/* Row 2 — dropdowns */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          {[
-            {
-              value: filterAction, setValue: setFilterAction,
-              placeholder: "All actions", width: 148,
-              items: options.actions.map((a) => ({ value: a, label: a })),
-            },
-            {
-              value: filterEntity, setValue: setFilterEntity,
-              placeholder: "All entities", width: 148,
-              items: options.entities.map((e) => ({ value: e, label: e })),
-            },
-            {
-              value: filterRisk, setValue: setFilterRisk,
-              placeholder: "All risk levels", width: 148,
-              items: [
-                { value: "High", label: "High" },
-                { value: "Medium", label: "Medium" },
-                { value: "Low", label: "Low" },
-              ],
-            },
-            {
-              value: filterUser, setValue: setFilterUser,
-              placeholder: "All users", width: 160,
-              items: options.users,
-            },
-          ].map(({ value, setValue, placeholder, width, items }) => (
-            <Select
-              key={placeholder}
-              value={value || "all"}
-              onValueChange={(v) => setValue(v === "all" ? "" : v)}
-              disabled={optionsLoading && placeholder !== "All risk levels"}
-            >
-              <SelectTrigger style={{ height: 36, fontSize: 13, width }}>
-                <SelectValue placeholder={placeholder} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{placeholder}</SelectItem>
-                {items.map(({ value: v, label }) => (
-                  <SelectItem key={v} value={v} style={{ textTransform: "capitalize" }}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ))}
-          </div>
-        </div>
-
-        {/* active filter tags */}
-        {activeTags.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12 }}>
-            {activeTags.map((t) => (
-              <div
-                key={t.label}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  fontSize: 13, padding: "4px 10px", borderRadius: 20,
-                  background: "var(--color-background-info)",
-                  color: "var(--color-text-info)",
-                  border: "0.5px solid var(--color-border-info)",
-                }}
-              >
-                {t.label}
-                <X size={11} style={{ cursor: "pointer", opacity: 0.6 }} onClick={t.clear} />
-              </div>
+            {[
+              { value: filterAction, setValue: setFilterAction, placeholder: "All actions",     width: 148, items: options.actions.map((a) => ({ value: a, label: a })) },
+              { value: filterEntity, setValue: setFilterEntity, placeholder: "All entities",    width: 148, items: options.entities.map((e) => ({ value: e, label: e })) },
+              { value: filterRisk,   setValue: setFilterRisk,   placeholder: "All risk levels", width: 148, items: [{ value: "High", label: "High" }, { value: "Medium", label: "Medium" }, { value: "Low", label: "Low" }] },
+              { value: filterUser,   setValue: setFilterUser,   placeholder: "All users",       width: 160, items: options.users },
+            ].map(({ value, setValue, placeholder, width, items }) => (
+              <Select key={placeholder} value={value || "all"} onValueChange={(v) => setValue(v === "all" ? "" : v)}
+                disabled={optionsLoading && placeholder !== "All risk levels"}>
+                <SelectTrigger style={{ height: 32, fontSize: 13, width, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+                  <SelectValue placeholder={placeholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{placeholder}</SelectItem>
+                  {items.map(({ value: v, label }) => (
+                    <SelectItem key={v} value={v} style={{ textTransform: "capitalize" }}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ))}
+            <div style={{ flex: 1 }} />
+            <button style={{ ...btnNeutral, opacity: loading ? 0.6 : 1 }} onClick={loadLogs} disabled={loading}>Refresh</button>
           </div>
-        )}
+
+          {/* Active filter tags */}
+          {activeTags.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+              {activeTags.map((t) => (
+                <div key={t.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "3px 10px", borderRadius: 20, background: ACCENT_LIGHT, color: ACCENT, border: "0.5px solid #c7d2fe" }}>
+                  {t.label}
+                  <X size={11} style={{ cursor: "pointer", opacity: 0.6 }} onClick={t.clear} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* stat cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
+      {/* Stat cards */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
         {[
-          { num: logs.length,    label: "Total events",  color: undefined  },
-          { num: highRiskCount,  label: "High risk",     color: "#B91C1C"  },
-          { num: uniqueUsers,    label: "Active users",  color: "#065F46"  },
-          { num: uniqueEntities, label: "Entity types",  color: "#1D4ED8"  },
+          { num: logs.length,    label: "Total events",  color: T_PRIMARY  },
+          { num: highRiskCount,  label: "High risk",     color: "#b91c1c"  },
+          { num: uniqueUsers,    label: "Active users",  color: "#065f46"  },
+          { num: uniqueEntities, label: "Entity types",  color: "#1d4ed8"  },
         ].map(({ num, label, color }) => (
-          <div key={label} style={{
-            background: "var(--color-background-secondary)",
-            borderRadius: 10, padding: "12px 16px",
-          }}>
-            <div style={{ fontSize: 24, fontWeight: 600, color: color || "var(--color-text-primary)", lineHeight: 1 }}>
-              {num}
-            </div>
-            <div style={{ fontSize: 13, color: "var(--color-text-tertiary)", marginTop: 6 }}>{label}</div>
+          <div key={label} style={{ ...cardStyle, padding: "14px 16px" }}>
+            <div style={{ fontSize: 24, fontWeight: 700, color, lineHeight: 1 }}>{num}</div>
+            <div style={{ fontSize: 12, color: T_MUTED, marginTop: 6 }}>{label}</div>
           </div>
         ))}
       </div>
 
-      {/* table card */}
-      <div style={{
-        background: "var(--color-background-primary)",
-        border: "0.5px solid var(--color-border-tertiary)",
-        borderRadius: 12, overflow: "hidden",
-      }}>
-        {/* risk legend */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>Risk level:</span>
-          {[
-            { risk: "High", desc: "Destructive" },
-            { risk: "Medium", desc: "State change" },
-            { risk: "Low", desc: "Read / create" },
-          ].map(({ risk, desc }) => (
+      {/* Table card */}
+      <div style={cardStyle}>
+        {/* Risk legend */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "10px 16px", flexWrap: "wrap", borderBottom: "0.5px solid #eef0fc" }}>
+          <span style={{ fontSize: 12, color: T_MUTED }}>Risk level:</span>
+          {[{ risk: "High", desc: "Destructive" }, { risk: "Medium", desc: "State change" }, { risk: "Low", desc: "Read / create" }].map(({ risk, desc }) => (
             <div key={risk} style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <RiskBadge risk={risk} />
-              <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>{desc}</span>
+              <span style={{ fontSize: 12, color: T_MUTED }}>{desc}</span>
             </div>
           ))}
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: 4 }}>
             <div style={{ width: 3, height: 16, borderRadius: 2, background: "#E24B4A" }} />
-            <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>High risk row</span>
+            <span style={{ fontSize: 12, color: T_MUTED }}>High risk row</span>
           </div>
         </div>
 
-        <div style={{ borderTop: "0.5px solid var(--color-border-tertiary)" }}>
-          {error ? (
-            <div style={{ padding: "3rem", textAlign: "center", fontSize: 13, color: "var(--color-text-danger)" }}>
-              {error}
-            </div>
-          ) : loading ? (
-            <div style={{ padding: "3rem", textAlign: "center", fontSize: 13, color: "var(--color-text-tertiary)" }}>
-              Loading...
-            </div>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
-              <thead>
-                <tr style={{ background: "var(--color-background-secondary)" }}>
-                  {[
-                    { label: "Date & Time", w: 150 },
-                    { label: "User",        w: 160 },
-                    { label: "Action",      w: 100 },
-                    { label: "Entity",      w: 90  },
-                    { label: "Entity ID",   w: 120 },
-                    { label: "Details",     w: "auto" },
-                    { label: "Risk",        w: 80  },
-                  ].map(({ label, w }) => (
-                    <th key={label} style={{
-                      padding: "10px 16px", textAlign: "left",
-                      fontSize: 12, fontWeight: 600, letterSpacing: "0.04em",
-                      textTransform: "uppercase",
-                      color: "var(--color-text-tertiary)",
-                      borderBottom: "0.5px solid var(--color-border-tertiary)",
-                      width: w,
-                    }}>
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {logs.length === 0
-                  ? <EmptyState hasFilters={hasFilters} />
-                  : logs.map((log) => {
-                    const details  = log.message
-                      || (log.from_status && log.to_status
-                        ? `${log.entity_type} changed from ${log.from_status} to ${log.to_status}`
-                        : `${log.entity_type} ${log.action}`);
-                    return (
-                      <tr
-                        key={log.audit_id}
-                        onClick={() => {
-                          setTimelineEntity(null);
-                          setSelectedLog(selectedLog?.audit_id === log.audit_id ? null : log);
-                        }}
-                        style={getRowStyle(log)}
+        {/* Table */}
+        {error ? (
+          <div style={{ padding: "3rem", textAlign: "center", fontSize: 13, color: "#b91c1c" }}>{error}</div>
+        ) : loading ? (
+          <div style={{ padding: "3rem", textAlign: "center", fontSize: 13, color: T_MUTED }}>Loading…</div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed" }}>
+            <thead>
+              <tr>
+                {[
+                  { label: "Date & Time", w: 150 }, { label: "User",      w: 160 },
+                  { label: "Action",      w: 100 }, { label: "Entity",    w: 90  },
+                  { label: "Entity ID",   w: 120 }, { label: "Details",   w: "auto" },
+                  { label: "Risk",        w: 80  },
+                ].map(({ label, w }) => (
+                  <th key={label} style={{ ...thStyle, width: w }}>{label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {logs.length === 0 ? <EmptyState hasFilters={hasFilters} /> : logs.map((log) => {
+                const isSel    = selectedLog?.audit_id === log.audit_id;
+                const details  = log.message || (log.from_status && log.to_status ? `${log.entity_type} changed from ${log.from_status} to ${log.to_status}` : `${log.entity_type} ${log.action}`);
+                return (
+                  <tr key={log.audit_id}
+                    onClick={() => { setTimelineEntity(null); setSelectedLog(isSel ? null : log); }}
+                    style={{ cursor: "pointer", background: isSel ? ACCENT_LIGHT : "transparent", borderBottom: "0.5px solid #f0f0f0", borderLeft: log.risk === "High" ? "3px solid #E24B4A" : "3px solid transparent" }}
+                    onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#f5f7ff"; }}
+                    onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = isSel ? ACCENT_LIGHT : "transparent"; }}
+                  >
+                    <td style={{ padding: "12px 16px", fontSize: 13, color: T_SECONDARY, whiteSpace: "nowrap" }}>{formatDateTime(log.timestamp)}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <UserAvatar userId={log.user_id} />
+                        <span style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T_PRIMARY }}>{resolveUserName(log.user_id)}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: "12px 16px" }}><ActionBadge action={log.action} /></td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, color: T_SECONDARY, textTransform: "capitalize" }}>{log.entity_type}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setSelectedLog(null); setTimelineEntity({ id: log.entity_id, type: log.entity_type }); }}
+                        onMouseEnter={() => setHoveredEntityId(log.audit_id)}
+                        onMouseLeave={() => setHoveredEntityId(null)}
+                        style={{ ...btnBase, height: "auto", padding: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, color: ACCENT, background: "none", textDecoration: hoveredEntityId === log.audit_id ? "underline" : "none" }}
+                        title="Click to view full timeline"
                       >
-                        <td style={{ padding: "12px 16px", fontSize: 13, color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
-                          {formatDateTime(log.timestamp)}
-                        </td>
-                        <td style={{ padding: "12px 16px" }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <UserAvatar userId={log.user_id} />
-                            <span style={{ fontSize: 13, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {resolveUserName(log.user_id)}
-                            </span>
-                          </div>
-                        </td>
-                        <td style={{ padding: "12px 16px" }}>
-                          <ActionBadge action={log.action} />
-                        </td>
-                        <td style={{ padding: "12px 16px", fontSize: 13, color: "var(--color-text-secondary)", textTransform: "capitalize" }}>
-                          {log.entity_type}
-                        </td>
-                        <td style={{ padding: "12px 16px" }}>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedLog(null);
-                              setTimelineEntity({ id: log.entity_id, type: log.entity_type });
-                            }}
-                            onMouseEnter={() => setHoveredEntityId(log.audit_id)}
-                            onMouseLeave={() => setHoveredEntityId(null)}
-                            style={{
-                              background: "none", border: "none", padding: 0, cursor: "pointer",
-                              fontFamily: "monospace", fontSize: 13, fontWeight: 500,
-                              color: "var(--color-text-info)",
-                              textDecoration: hoveredEntityId === log.audit_id ? "underline" : "none",
-                            }}
-                            title="Click to view full timeline"
-                          >
-                            {log.entity_id}
-                          </button>
-                        </td>
-                        <td style={{
-                          padding: "12px 16px", fontSize: 13,
-                          color: "var(--color-text-secondary)",
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                        }} title={details}>
-                          {details}
-                        </td>
-                        <td style={{ padding: "12px 16px" }}>
-                          <RiskBadge risk={log.risk} />
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          )}
-        </div>
+                        {log.entity_id}
+                      </button>
+                    </td>
+                    <td style={{ padding: "12px 16px", fontSize: 13, color: T_SECONDARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={details}>{details}</td>
+                    <td style={{ padding: "12px 16px" }}><RiskBadge risk={log.risk} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
 
-        {/* pagination */}
-        <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "10px 20px",
-          borderTop: "0.5px solid var(--color-border-tertiary)",
-          background: "var(--color-background-secondary)",
-        }}>
-          <span style={{ fontSize: 13, color: "var(--color-text-tertiary)" }}>
-            {logs.length === 0
-              ? "No events"
-              : `Showing ${Math.min(1, logs.length)}–${logs.length} of ${total} events`}
+        {/* Pagination */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px", borderTop: "0.5px solid #eef0fc", background: "#fafbff" }}>
+          <span style={{ fontSize: 13, color: T_MUTED }}>
+            {logs.length === 0 ? "No events" : `Showing ${Math.min(1, logs.length)}–${logs.length} of ${total} events`}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <Button variant="outline" size="sm" style={{ height: 30, padding: "0 10px", fontSize: 13 }}
-              disabled={page === 1} onClick={() => setPage((p) => p - 1)}>←</Button>
+            <button style={{ ...btnOutline, opacity: page === 1 ? 0.4 : 1, cursor: page === 1 ? "not-allowed" : "pointer" }} disabled={page === 1} onClick={() => setPage((p) => p - 1)}>←</button>
             {Array.from({ length: totalPages }, (_, i) => i + 1)
               .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
-              .reduce((acc, p, idx, arr) => {
-                if (idx > 0 && p - arr[idx - 1] > 1) acc.push("...");
-                acc.push(p);
-                return acc;
-              }, [])
-              .map((p, i) =>
-                p === "..." ? (
-                  <span key={`d${i}`} style={{ fontSize: 13, color: "var(--color-text-tertiary)", padding: "0 4px" }}>…</span>
-                ) : (
-                  <Button key={p}
-                    variant={p === page ? "default" : "outline"}
-                    size="sm" style={{ height: 30, width: 30, padding: 0, fontSize: 13 }}
-                    onClick={() => setPage(p)}>
-                    {p}
-                  </Button>
-                ),
-              )}
-            <Button variant="outline" size="sm" style={{ height: 30, padding: "0 10px", fontSize: 13 }}
-              disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>→</Button>
+              .reduce((acc, p, idx, arr) => { if (idx > 0 && p - arr[idx - 1] > 1) acc.push("..."); acc.push(p); return acc; }, [])
+              .map((p, i) => p === "..." ? (
+                <span key={`d${i}`} style={{ fontSize: 13, color: T_MUTED, padding: "0 4px" }}>…</span>
+              ) : (
+                <button key={p} onClick={() => setPage(p)}
+                  style={{ ...btnOutline, width: 30, padding: 0, justifyContent: "center", background: p === page ? ACCENT : "#fff", color: p === page ? "#fff" : T_PRIMARY, border: p === page ? "none" : "0.5px solid #d1d5db" }}>
+                  {p}
+                </button>
+              ))}
+            <button style={{ ...btnOutline, opacity: page === totalPages ? 0.4 : 1, cursor: page === totalPages ? "not-allowed" : "pointer" }} disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>→</button>
           </div>
         </div>
       </div>
 
-      {/* detail panel */}
+      {/* Detail panel */}
       {selectedLog && !timelineEntity && (
-        <DetailPanel
-          log={selectedLog}
-          onClose={() => setSelectedLog(null)}
-          onViewTimeline={() => {
-            setTimelineEntity({ id: selectedLog.entity_id, type: selectedLog.entity_type });
-          }}
-        />
+        <DetailPanel log={selectedLog} onClose={() => setSelectedLog(null)}
+          onViewTimeline={() => setTimelineEntity({ id: selectedLog.entity_id, type: selectedLog.entity_type })} />
       )}
 
-      {/* entity timeline */}
+      {/* Entity timeline */}
       {timelineEntity && (
-        <EntityTimeline
-          entityId={timelineEntity.id}
-          entityType={timelineEntity.type}
-          allLogs={allLogs}
+        <EntityTimeline entityId={timelineEntity.id} entityType={timelineEntity.type} allLogs={allLogs}
           onBack={() => {
             setTimelineEntity(null);
-            if (!selectedLog) {
-              const match = allLogs.find((l) => l.entity_id === timelineEntity.id);
-              if (match) setSelectedLog(match);
-            }
-          }}
-        />
+            if (!selectedLog) { const match = allLogs.find((l) => l.entity_id === timelineEntity.id); if (match) setSelectedLog(match); }
+          }} />
       )}
     </AppLayout>
   );

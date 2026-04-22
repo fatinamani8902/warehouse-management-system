@@ -2,20 +2,79 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchShipments, toSessionContext } from "@/services/api";
 
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const ACCENT       = "#3b5bdb";
+const ACCENT_LIGHT = "#eef2ff";
+const T_PRIMARY    = "#111827";
+const T_SECONDARY  = "#374151";
+const T_LABEL      = "#6b7280";
+const T_MUTED      = "#9ca3af";
+
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 34, padding: "0 14px", borderRadius: 7, fontSize: 14, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnOutline = { ...btnBase, height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnPrimary = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, background: ACCENT, color: "#fff" };
+const btnDanger  = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, background: "#e03131", color: "#fff" };
+
+const cardStyle = {
+  background: "#fff", borderRadius: 12,
+  border: "0.5px solid #e8ebf8", overflow: "hidden",
+  boxShadow: "0 2px 10px rgba(59,91,219,.07)",
+};
+
+// ── Status pill ───────────────────────────────────────────────────────────────
+const STATUS_CFG = {
+  open:             { bg: "#dbeafe", color: "#1e40af", border: "#93c5fd", dot: "#3b82f6",  label: "Open" },
+  overdue:          { bg: "#fee2e2", color: "#991b1b", border: "#fca5a5", dot: "#ef4444",  label: "Overdue" },
+  pending:          { bg: "#f3f4f6", color: "#111827", border: "#d1d5db", dot: "#6b7280",  label: "Pending" },
+  ready:            { bg: "#dbeafe", color: "#1e40af", border: "#93c5fd", dot: "#3b82f6",  label: "Ready" },
+  packed:           { bg: "#dbeafe", color: "#1e40af", border: "#93c5fd", dot: "#3b82f6",  label: "Packed" },
+  carton_generated: { bg: "#dbeafe", color: "#1e40af", border: "#93c5fd", dot: "#3b82f6",  label: "Carton Generated" },
+  dispatched:       { bg: "#fef9c3", color: "#713f12", border: "#fde68a", dot: "#eab308",  label: "Dispatched" },
+  closed:           { bg: "#dcfce7", color: "#065f46", border: "#86efac", dot: "#22c55e",  label: "Closed" },
+  cancelled:        { bg: "#f3f4f6", color: "#6b7280", border: "#d1d5db", dot: "#9ca3af",  label: "Cancelled" },
+};
+
+function StatusPill({ status }) {
+  const key = String(status || "").toLowerCase().replace(/ /g, "_");
+  const c = STATUS_CFG[key] || { bg: "#f3f4f6", color: "#111827", border: "#d1d5db", dot: "#6b7280", label: status || "—" };
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      fontSize: 13, fontWeight: 500, padding: "4px 12px", borderRadius: 20,
+      background: c.bg, color: c.color, border: `0.5px solid ${c.border}`,
+      whiteSpace: "nowrap",
+    }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
+      {c.label}
+    </span>
+  );
+}
+
+// ── DetailField ───────────────────────────────────────────────────────────────
+function DetailField({ label, value, mono, danger, span }) {
+  return (
+    <div style={span ? { gridColumn: "1 / -1" } : {}}>
+      <p style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+        {label}
+      </p>
+      <p style={{ fontSize: 14, fontWeight: 500, color: danger ? "#991b1b" : T_PRIMARY, fontFamily: mono ? "var(--font-mono)" : "inherit" }}>
+        {value ?? "—"}
+      </p>
+    </div>
+  );
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 const initialFilters = { search: "", status: "", carrier: "" };
 
 const roleAliases = {
@@ -30,8 +89,6 @@ const shippingStatuses = new Set([
   "carton_generated", "dispatched", "closed", "cancelled",
 ]);
 
-const ACTION_ROLES = new Set(["superadmin", "hqadmin", "storemanager", "storeoperator"]);
-
 const CARRIERS = [
   "DHL Express", "FedEx Ground", "UPS Standard", "Pos Laju",
   "J&T Express", "City-Link Express", "Ninja Van", "GDex",
@@ -39,59 +96,21 @@ const CARRIERS = [
 
 const DISPATCHABLE = new Set(["packed", "carton_generated"]);
 
-const STATUS_CONFIG = {
-  open:              { bg: "#DBEAFE", color: "#1E40AF", label: "Open" },
-  overdue:           { bg: "#FEE2E2", color: "#991B1B", label: "Overdue" },
-  pending:           { bg: "#F1EFE8", color: "#5F5E5A", label: "Pending" },
-  ready:             { bg: "#DBEAFE", color: "#1E40AF", label: "Ready" },
-  packed:            { bg: "#DBEAFE", color: "#1E40AF", label: "Packed" },
-  carton_generated:  { bg: "#DBEAFE", color: "#1E40AF", label: "Carton Generated" },
-  dispatched:        { bg: "#FEF3C7", color: "#92400E", label: "Dispatched" },
-  closed:            { bg: "#D1FAE5", color: "#065F46", label: "Closed" },
-  cancelled:         { bg: "#F3F4F6", color: "#6B7280", label: "Cancelled" },
-};
-
-function StatusBadge({ status }) {
-  const key = String(status || "").toLowerCase().replace(/ /g, "_");
-  const cfg = STATUS_CONFIG[key] || { bg: "#F1EFE8", color: "#5F5E5A", label: status || "-" };
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center",
-      fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 20,
-      background: cfg.bg, color: cfg.color, whiteSpace: "nowrap",
-    }}>
-      {cfg.label}
-    </span>
-  );
-}
+const DISPATCH_ROLES = new Set(["superadmin", "hqadmin", "storemanager", "storeoperator"]);
+const CLOSE_ROLES    = new Set(["superadmin", "hqadmin", "storemanager"]);
+const CANCEL_ROLES   = new Set(["superadmin", "hqadmin", "storemanager"]);
 
 function normalizeRole(roleId) {
   return roleAliases[String(roleId || "readonly").toLowerCase()] || "readonly";
 }
-
-// Roles that can dispatch shipments
-const DISPATCH_ROLES = new Set(["superadmin", "hqadmin", "storemanager", "storeoperator"]);
-// Roles that can close shipments
-const CLOSE_ROLES = new Set(["superadmin", "hqadmin", "storemanager"]);
-// Roles that can cancel shipments
-const CANCEL_ROLES = new Set(["superadmin", "hqadmin", "storemanager"]);
-
-function canDispatchShipment(roleId) {
-  return DISPATCH_ROLES.has(normalizeRole(roleId));
-}
-
-function canCloseShipment(roleId) {
-  return CLOSE_ROLES.has(normalizeRole(roleId));
-}
-
-function canCancelShipment(roleId) {
-  return CANCEL_ROLES.has(normalizeRole(roleId));
-}
+function canDispatchShipment(roleId) { return DISPATCH_ROLES.has(normalizeRole(roleId)); }
+function canCloseShipment(roleId)    { return CLOSE_ROLES.has(normalizeRole(roleId)); }
+function canCancelShipment(roleId)   { return CANCEL_ROLES.has(normalizeRole(roleId)); }
 
 function formatDateTime(value) {
-  if (!value) return "-";
+  if (!value) return "—";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
+  if (Number.isNaN(parsed.getTime())) return "—";
   return parsed.toLocaleString("en-GB", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
@@ -104,24 +123,23 @@ function parseShippingStatusFilter(search) {
   return shippingStatuses.has(status) ? status : "";
 }
 
+// ── Modals (keep shadcn Dialog — layout-agnostic) ─────────────────────────────
 function DispatchModal({ shipment, onClose, onSuccess }) {
-  const defaultCarrier = shipment?.carrier || "";
-  const isKnownCarrier = CARRIERS.includes(defaultCarrier);
+  const defaultCarrier  = shipment?.carrier || "";
+  const isKnownCarrier  = CARRIERS.includes(defaultCarrier);
   const [carrierMode, setCarrierMode] = useState(defaultCarrier && !isKnownCarrier ? "manual" : "select");
-  const [carrier, setCarrier] = useState(defaultCarrier);
-  const [trackingNo, setTrackingNo] = useState(shipment?.tracking_no || "");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [carrier, setCarrier]         = useState(defaultCarrier);
+  const [trackingNo, setTrackingNo]   = useState(shipment?.tracking_no || "");
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState("");
 
   const handleDispatch = async () => {
-    if (!carrier.trim()) { setError("Carrier is required."); return; }
+    if (!carrier.trim())    { setError("Carrier is required."); return; }
     if (!trackingNo.trim()) { setError("Tracking number is required."); return; }
     try {
-      setLoading(true);
-      setError("");
-      const res = await fetch(`/api/v1/shipping/${shipment.shipment_id}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      setLoading(true); setError("");
+      const res  = await fetch(`/api/v1/shipping/${shipment.shipment_id}/dispatch`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ carrier: carrier.trim(), tracking_no: trackingNo.trim() }),
       });
       const data = await res.json();
@@ -180,12 +198,12 @@ function DispatchModal({ shipment, onClose, onSuccess }) {
 
 function CloseModal({ shipment, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
 
   const handleClose = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/v1/shipping/${shipment.shipment_id}/close`, {
+      const res  = await fetch(`/api/v1/shipping/${shipment.shipment_id}/close`, {
         method: "POST", headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
@@ -229,17 +247,16 @@ function CloseModal({ shipment, onClose, onSuccess }) {
 }
 
 function CancelModal({ shipment, onClose, onSuccess }) {
-  const [reason, setReason] = useState("");
+  const [reason, setReason]   = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
 
   const handleCancel = async () => {
     if (!reason.trim()) { setError("Cancellation reason is required."); return; }
     try {
       setLoading(true);
-      const res = await fetch(`/api/v1/shipping/${shipment.shipment_id}/cancel`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res  = await fetch(`/api/v1/shipping/${shipment.shipment_id}/cancel`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: reason.trim() }),
       });
       const data = await res.json();
@@ -273,272 +290,263 @@ function CancelModal({ shipment, onClose, onSuccess }) {
   );
 }
 
+// ── Page ──────────────────────────────────────────────────────────────────────
 const ShippingPage = () => {
   const location = useLocation();
-  const auth = useAuth();
-  const session = useMemo(() => toSessionContext(auth), [auth]);
-  const roleId = useMemo(() => normalizeRole(auth.currentUser?.role), [auth.currentUser?.role]);
-  const canView = useMemo(
+  const auth     = useAuth();
+  const session  = useMemo(() => toSessionContext(auth), [auth]);
+  const roleId   = useMemo(() => normalizeRole(auth.currentUser?.role), [auth.currentUser?.role]);
+  const canView  = useMemo(
     () => ["superadmin", "hqadmin", "storemanager", "storeoperator", "auditor", "readonly"].includes(roleId),
     [roleId],
   );
-  const canDispatch = useMemo(() => canDispatchShipment(roleId), [roleId]);
-  const canClose = useMemo(() => canCloseShipment(roleId), [roleId]);
+  const canDispatch   = useMemo(() => canDispatchShipment(roleId), [roleId]);
+  const canClose      = useMemo(() => canCloseShipment(roleId), [roleId]);
   const canCancelShip = useMemo(() => canCancelShipment(roleId), [roleId]);
 
-  const [filters, setFilters] = useState(initialFilters);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [rows, setRows] = useState([]);
-  const [total, setTotal] = useState(0);
+  const [filters, setFilters]                       = useState(initialFilters);
+  const [page, setPage]                             = useState(1);
+  const [pageSize, setPageSize]                     = useState(10);
+  const [loading, setLoading]                       = useState(true);
+  const [error, setError]                           = useState("");
+  const [rows, setRows]                             = useState([]);
+  const [total, setTotal]                           = useState(0);
   const [selectedShipmentId, setSelectedShipmentId] = useState("");
-  const [dispatchTarget, setDispatchTarget] = useState(null);
-  const [closeTarget, setCloseTarget] = useState(null);
-  const [cancelTarget, setCancelTarget] = useState(null);
+  const [dispatchTarget, setDispatchTarget]         = useState(null);
+  const [closeTarget, setCloseTarget]               = useState(null);
+  const [cancelTarget, setCancelTarget]             = useState(null);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
+  const totalPages       = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const selectedShipment = useMemo(() => rows.find((r) => r.shipment_id === selectedShipmentId) || null, [rows, selectedShipmentId]);
 
   useEffect(() => {
     const status = parseShippingStatusFilter(location.search);
-    setFilters((current) => ({ ...current, status }));
+    setFilters((c) => ({ ...c, status }));
     setPage(1);
   }, [location.search]);
 
   const loadShipments = useCallback(async () => {
     if (!session.tenant_id || !canView) { setRows([]); setTotal(0); setLoading(false); return; }
     try {
-      setLoading(true);
-      setError("");
+      setLoading(true); setError("");
       const result = await fetchShipments(session, {
         page, pageSize,
-        search: filters.search || undefined,
-        status: filters.status || undefined,
+        search:  filters.search  || undefined,
+        status:  filters.status  || undefined,
         carrier: filters.carrier || undefined,
       });
       const items = Array.isArray(result?.data) ? result.data : [];
       setRows(items);
       setTotal(Number(result?.total || 0));
-      setSelectedShipmentId((current) => {
-        if (current && items.some((r) => r.shipment_id === current)) return current;
-        return items[0]?.shipment_id || "";
-      });
-    } catch (loadError) {
+      setSelectedShipmentId((cur) => (cur && items.some((r) => r.shipment_id === cur)) ? cur : "");
+    } catch (e) {
       setRows([]); setTotal(0);
-      setError(loadError.message || "Failed to load shipments");
+      setError(e.message || "Failed to load shipments");
     } finally { setLoading(false); }
   }, [canView, filters, page, pageSize, session]);
 
   useEffect(() => { loadShipments(); }, [loadShipments]);
 
   const updateFilter = (key, value) => { setFilters((c) => ({ ...c, [key]: value })); setPage(1); };
+  const clearFilters = () => { setFilters(initialFilters); setPage(1); };
 
   const handleActionSuccess = (updated) => {
-    setRows((current) => current.map((r) => r.shipment_id === updated.shipment_id ? updated : r));
+    setRows((cur) => cur.map((r) => r.shipment_id === updated.shipment_id ? updated : r));
     setDispatchTarget(null);
     setCloseTarget(null);
     setCancelTarget(null);
   };
 
-  const colSpan = 7;
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
       <Breadcrumbs items={[{ label: "Shipping" }]} />
-      <h1 className="text-2xl font-bold mb-4">Shipping</h1>
 
-      {error && <p className="mb-3 text-sm text-destructive">{error}</p>}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Shipping</h1>
+        <p style={{ fontSize: 13, color: T_SECONDARY }}>Manage and track outbound shipments</p>
+      </div>
 
-      {/* Filter bar */}
-      <Card className="mb-4">
-        <CardContent className="pt-4">
-          <div className="flex flex-wrap gap-2">
-            <Input
-              className="h-9 min-w-[220px] flex-1"
-              placeholder="Search Shipment ID, Customer, Carrier, Tracking..."
-              value={filters.search}
-              onChange={(e) => updateFilter("search", e.target.value)}
-            />
-            <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v === "all" ? "" : v)}>
-              <SelectTrigger className="h-9 w-[180px]">
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="overdue">Overdue</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="ready">Ready</SelectItem>
-                <SelectItem value="packed">Packed</SelectItem>
-                <SelectItem value="carton_generated">Carton Generated</SelectItem>
-                <SelectItem value="dispatched">Dispatched</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" className="h-9" onClick={() => { setFilters(initialFilters); setPage(1); }}>Clear</Button>
-            <Button variant="outline" className="h-9" onClick={loadShipments} disabled={loading}>Refresh</Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/60">
-                <tr>
-                  <th className="px-3 py-2 text-left">Shipment ID</th>
-                  <th className="px-3 py-2 text-left">Customer</th>
-                  <th className="px-3 py-2 text-left">Carrier</th>
-                  <th className="px-3 py-2 text-left">Tracking</th>
-                  <th className="px-3 py-2 text-left">Dispatch Due</th>
-                  <th className="px-3 py-2 text-left">Status</th>
-                  <th className="px-3 py-2 text-left">Cancellation Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading shipments...
-                      </span>
-                    </td>
-                  </tr>
-                )}
-                {!loading && rows.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                      No shipments found.
-                    </td>
-                  </tr>
-                )}
-                {!loading && rows.map((row) => (
-                  <tr
-                    key={row.shipment_id}
-                    className={`border-t cursor-pointer hover:bg-accent/40 ${selectedShipmentId === row.shipment_id ? "bg-accent/30" : ""}`}
-                    onClick={() => setSelectedShipmentId(row.shipment_id)}
-                  >
-                    <td className="px-3 py-2 font-mono text-xs">{row.shipment_id}</td>
-                    <td className="px-3 py-2">{row.customer_name || "-"}</td>
-                    <td className="px-3 py-2">{row.carrier || "-"}</td>
-                    <td className="px-3 py-2 font-mono text-xs">{row.tracking_no || "-"}</td>
-                    <td className="px-3 py-2">{formatDateTime(row.dispatch_due_at || row.ship_by)}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={row.status} />
-                        {row.is_overdue && <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#FEE2E2", color: "#991B1B" }}>Overdue</span>}
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{row.cancellation_reason || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-2 text-sm">
-            <div className="text-muted-foreground">
-              {total} result{total === 1 ? "" : "s"} · Page {page} of {totalPages}
-            </div>
-            <div className="flex items-center gap-2">
-              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
-                <SelectTrigger className="h-8 w-[92px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="10">10 / page</SelectItem>
-                  <SelectItem value="20">20 / page</SelectItem>
-                  <SelectItem value="50">50 / page</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</Button>
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Detail panel */}
-      {selectedShipment && (
-        <div className="mt-4 rounded-lg border bg-card overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b bg-muted/30">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <span className="font-mono">{selectedShipment.shipment_id}</span>
-              <StatusBadge status={selectedShipment.status} />
-              {selectedShipment.is_overdue && (
-                <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#FEE2E2", color: "#991B1B" }}>Overdue</span>
-              )}
-            </div>
-          </div>
-
-          <div className="px-5 py-4 space-y-4">
-            {/* Info grid */}
-            <div className="rounded-md border bg-muted/20 px-4 py-3">
-              <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm md:grid-cols-4">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Customer</p>
-                  <p className="font-medium">{selectedShipment.customer_name || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Carrier</p>
-                  <p>{selectedShipment.carrier || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Tracking No</p>
-                  <p className="font-mono text-xs">{selectedShipment.tracking_no || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Dispatch Due</p>
-                  <p>{formatDateTime(selectedShipment.dispatch_due_at || selectedShipment.ship_by)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Dispatched At</p>
-                  <p>{formatDateTime(selectedShipment.dispatched_at)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-0.5">Closed At</p>
-                  <p>{formatDateTime(selectedShipment.closed_at || selectedShipment.updated_at)}</p>
-                </div>
-                {selectedShipment.cancellation_reason && (
-                  <div className="col-span-2 md:col-span-4">
-                    <p className="text-xs text-muted-foreground mb-0.5">Cancellation Reason</p>
-                    <p className="font-medium text-destructive">{selectedShipment.cancellation_reason}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action buttons */}
-            {(canDispatch || canClose || canCancelShip) && (
-              <div className="flex flex-wrap items-center gap-2 border-t pt-3">
-                {canDispatch && DISPATCHABLE.has(selectedShipment.status) && (
-                  <Button size="sm" onClick={() => setDispatchTarget(selectedShipment)}>
-                    Dispatch Shipment
-                  </Button>
-                )}
-                {canClose && selectedShipment.status === "dispatched" && (
-                  <Button size="sm" variant="outline" onClick={() => setCloseTarget(selectedShipment)}>
-                    Close Shipment
-                  </Button>
-                )}
-                {canCancelShip && ["pending", "packed", "carton_generated"].includes(selectedShipment.status) && (
-                  <Button size="sm" variant="destructive" onClick={() => setCancelTarget(selectedShipment)}>
-                    Cancel Shipment
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
+      {error && (
+        <div style={{ marginBottom: 12, padding: "10px 14px", borderRadius: 8, background: "#fee2e2", border: "0.5px solid #fca5a5", fontSize: 13, color: "#991b1b" }}>
+          {error}
         </div>
       )}
 
+      <div style={cardStyle}>
+        {/* Toolbar */}
+        <div style={{ padding: "11px 16px", display: "flex", alignItems: "center", gap: 8, background: "#fafbff", borderBottom: "0.5px solid #eef0fc", flexWrap: "wrap" }}>
+          <div style={{ position: "relative", flex: 1, maxWidth: 300 }}>
+            <svg style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", width: 13, height: 13, color: "#6b7280" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
+            </svg>
+            <input
+              style={{ width: "100%", height: 34, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 14, color: T_PRIMARY, outline: "none", background: "#fff" }}
+              placeholder="Search Shipment ID, Customer, Carrier, Tracking…"
+              value={filters.search}
+              onChange={(e) => updateFilter("search", e.target.value)}
+            />
+          </div>
+          <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v === "all" ? "" : v)}>
+            <SelectTrigger style={{ height: 34, width: 175, fontSize: 14, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+              <SelectValue placeholder="All Statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="ready">Ready</SelectItem>
+              <SelectItem value="packed">Packed</SelectItem>
+              <SelectItem value="carton_generated">Carton Generated</SelectItem>
+              <SelectItem value="dispatched">Dispatched</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+          <div style={{ flex: 1 }} />
+          <button style={btnNeutral} onClick={clearFilters}>Clear</button>
+          <button style={{ ...btnNeutral, opacity: loading ? 0.6 : 1 }} onClick={loadShipments} disabled={loading}>Refresh</button>
+        </div>
+
+        {/* Table */}
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ background: "#fafbff" }}>
+              {["Shipment ID", "Customer", "Carrier", "Tracking", "Dispatch Due", "Status"].map((h) => (
+                <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading && (
+              <tr><td colSpan={6} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} /> Loading shipments…
+                </span>
+              </td></tr>
+            )}
+            {!loading && rows.length === 0 && (
+              <tr><td colSpan={6} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>No shipments found.</td></tr>
+            )}
+            {!loading && rows.map((row) => {
+              const isSel = selectedShipmentId === row.shipment_id;
+              return (
+                <tr key={row.shipment_id}
+                  style={{ cursor: "pointer", background: isSel ? ACCENT_LIGHT : "transparent", borderBottom: "0.5px solid #f0f0f0" }}
+                  onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#f5f7ff"; }}
+                  onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
+                  onClick={() => setSelectedShipmentId((prev) => prev === row.shipment_id ? "" : row.shipment_id)}
+                >
+                  <td style={{ padding: "14px 16px", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: T_SECONDARY }}>{row.shipment_id}</td>
+                  <td style={{ padding: "14px 16px", fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>{row.customer_name || "—"}</td>
+                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>{row.carrier || "—"}</td>
+                  <td style={{ padding: "14px 16px", fontFamily: "var(--font-mono)", fontSize: 13, color: T_SECONDARY }}>{row.tracking_no || "—"}</td>
+                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>{formatDateTime(row.dispatch_due_at || row.ship_by)}</td>
+                  <td style={{ padding: "14px 16px" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      <StatusPill status={row.status} />
+                      {row.is_overdue && (
+                        <span style={{ fontSize: 11, fontWeight: 500, padding: "2px 8px", borderRadius: 20, background: "#fee2e2", color: "#991b1b", border: "0.5px solid #fca5a5" }}>
+                          Overdue
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        {/* Pagination */}
+        <div style={{ padding: "10px 16px", borderTop: "0.5px solid #eef0fc", background: "#fafbff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: T_SECONDARY }}>
+            {total} result{total === 1 ? "" : "s"} · Page {page} of {totalPages}
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <SelectTrigger style={{ height: 30, width: 110, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 5, color: T_PRIMARY }}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[10, 20, 50].map((n) => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {[
+              { label: "Prev", disabled: page <= 1,          fn: () => setPage((p) => p - 1) },
+              { label: "Next", disabled: page >= totalPages,  fn: () => setPage((p) => p + 1) },
+            ].map((b) => (
+              <button key={b.label} disabled={b.disabled} onClick={b.fn}
+                style={{ ...btnOutline, opacity: b.disabled ? 0.4 : 1, cursor: b.disabled ? "not-allowed" : "pointer" }}>
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Detail Panel ── */}
+        {selectedShipment && (
+          <div style={{ borderTop: "2px solid #3b5bdb", background: "#fff" }}>
+            <div style={{ padding: "18px 16px 16px" }}>
+
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: T_PRIMARY }}>{selectedShipment.shipment_id}</span>
+                <StatusPill status={selectedShipment.status} />
+                {selectedShipment.is_overdue && (
+                  <span style={{ fontSize: 11, fontWeight: 500, padding: "4px 10px", borderRadius: 20, background: "#fee2e2", color: "#991b1b", border: "0.5px solid #fca5a5" }}>
+                    Overdue
+                  </span>
+                )}
+              </div>
+
+              {/* Info grid */}
+              <div style={{ borderRadius: 8, border: "0.5px solid #e5e7eb", background: "#fafbff", padding: "12px 16px", marginBottom: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14 }}>
+                  <DetailField label="Customer"     value={selectedShipment.customer_name} />
+                  <DetailField label="Carrier"      value={selectedShipment.carrier} />
+                  <DetailField label="Tracking No"  value={selectedShipment.tracking_no} mono />
+                  <DetailField label="Dispatch Due" value={formatDateTime(selectedShipment.dispatch_due_at || selectedShipment.ship_by)} />
+                  <DetailField label="Dispatched At" value={formatDateTime(selectedShipment.dispatched_at)} />
+                  <DetailField label="Closed At"    value={formatDateTime(selectedShipment.closed_at || selectedShipment.updated_at)} />
+                  {selectedShipment.cancellation_reason && (
+                    <DetailField label="Cancellation Reason" value={selectedShipment.cancellation_reason} danger span />
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              {(canDispatch || canClose || canCancelShip) && (
+                <div style={{ borderTop: "0.5px solid #e5e7eb", paddingTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {canDispatch && DISPATCHABLE.has(selectedShipment.status) && (
+                    <button style={btnPrimary} onClick={() => setDispatchTarget(selectedShipment)}>
+                      Dispatch Shipment
+                    </button>
+                  )}
+                  {canClose && selectedShipment.status === "dispatched" && (
+                    <button style={btnNeutral} onClick={() => setCloseTarget(selectedShipment)}>
+                      Close Shipment
+                    </button>
+                  )}
+                  {canCancelShip && ["pending", "packed", "carton_generated"].includes(selectedShipment.status) && (
+                    <button style={btnDanger} onClick={() => setCancelTarget(selectedShipment)}>
+                      Cancel Shipment
+                    </button>
+                  )}
+                </div>
+              )}
+
+            </div>
+          </div>
+        )}
+      </div>
+
       {dispatchTarget && <DispatchModal shipment={dispatchTarget} onClose={() => setDispatchTarget(null)} onSuccess={handleActionSuccess} />}
-      {closeTarget && <CloseModal shipment={closeTarget} onClose={() => setCloseTarget(null)} onSuccess={handleActionSuccess} />}
-      {cancelTarget && <CancelModal shipment={cancelTarget} onClose={() => setCancelTarget(null)} onSuccess={handleActionSuccess} />}
+      {closeTarget    && <CloseModal    shipment={closeTarget}    onClose={() => setCloseTarget(null)}    onSuccess={handleActionSuccess} />}
+      {cancelTarget   && <CancelModal   shipment={cancelTarget}   onClose={() => setCancelTarget(null)}   onSuccess={handleActionSuccess} />}
     </AppLayout>
   );
 };

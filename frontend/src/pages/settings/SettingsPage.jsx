@@ -1,18 +1,49 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { Building2, Shield, Radio, QrCode, Code, AlertTriangle } from "lucide-react";
+
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const ACCENT      = "#3b5bdb";
+const T_PRIMARY   = "#111827";
+const T_SECONDARY = "#374151";
+const T_LABEL     = "#6b7280";
+const T_MUTED     = "#9ca3af";
+
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: ACCENT, color: "#fff" };
+const cardStyle  = { background: "#fff", borderRadius: 12, border: "0.5px solid #e8ebf8", overflow: "hidden", boxShadow: "0 2px 10px rgba(59,91,219,.07)" };
+
+// ── Section card header ───────────────────────────────────────────────────────
+function CardHeader({ icon: Icon, title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 16px", background: "#fafbff", borderBottom: "0.5px solid #eef0fc" }}>
+      <Icon size={14} color={T_LABEL} />
+      <span style={{ fontSize: 13, fontWeight: 600, color: T_PRIMARY }}>{title}</span>
+    </div>
+  );
+}
+
+// ── Field label ───────────────────────────────────────────────────────────────
+function FieldLabel({ children }) {
+  return <label style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: 5 }}>{children}</label>;
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 const SettingsPage = () => {
-    const { getTenantName, currentTenantId } = useAuth();
-    return (<AppLayout>
-      <Breadcrumbs items={[{ label: "Settings" }]}/>
-      <h1 className="text-2xl font-bold mb-4">Settings</h1>
+  const { getTenantName, currentTenantId } = useAuth();
+
+  return (
+    <AppLayout>
+      <Breadcrumbs items={[{ label: "Settings" }]} />
+
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Settings</h1>
+        <p style={{ fontSize: 13, color: T_SECONDARY }}>System configuration and preferences</p>
+      </div>
 
       <Tabs defaultValue="tenant">
         <TabsList>
@@ -22,82 +53,129 @@ const SettingsPage = () => {
           <TabsTrigger value="dev">Dev Notes</TabsTrigger>
         </TabsList>
 
+        {/* ── TENANT ── */}
         <TabsContent value="tenant" className="mt-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Building2 className="h-4 w-4"/>Tenant Settings</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label className="text-xs">Tenant Name</Label><Input value={getTenantName()} readOnly className="h-9"/></div>
-                <div><Label className="text-xs">Tenant ID</Label><Input value={currentTenantId || ""} readOnly className="h-9 font-mono"/></div>
+          <div style={cardStyle}>
+            <CardHeader icon={Building2} title="Tenant Settings" />
+            <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div>
+                  <FieldLabel>Tenant Name</FieldLabel>
+                  <Input value={getTenantName()} readOnly style={{ height: 34, fontSize: 13 }} />
+                </div>
+                <div>
+                  <FieldLabel>Tenant ID</FieldLabel>
+                  <Input value={currentTenantId || ""} readOnly style={{ height: 34, fontSize: 13, fontFamily: "var(--font-mono)" }} />
+                </div>
               </div>
-              <div><Label className="text-xs">Default Warehouse</Label><Input value="WH000001 — Main Distribution Center" readOnly className="h-9"/></div>
-              <Button size="sm">Save Changes</Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="security" className="mt-4">
-          <Card>
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Shield className="h-4 w-4"/>Security Settings</CardTitle></CardHeader>
-            <CardContent className="space-y-4 text-sm">
-              <div className="grid grid-cols-2 gap-4">
-                <div><Label className="text-xs">Password Policy</Label><p className="text-muted-foreground text-xs">Min 12 chars, 1 uppercase, 1 number, 1 special</p></div>
-                <div><Label className="text-xs">Session Timeout</Label><p className="text-muted-foreground text-xs">60 minutes of inactivity</p></div>
-                <div><Label className="text-xs">MFA</Label><Badge variant="outline" className="text-xs">Available via Clerk</Badge></div>
-                <div><Label className="text-xs">JWT Token</Label><p className="text-muted-foreground text-xs">RS256, 1-hour expiry, refresh enabled</p></div>
+              <div>
+                <FieldLabel>Default Warehouse</FieldLabel>
+                <Input value="WH000001 — Main Distribution Center" readOnly style={{ height: 34, fontSize: 13 }} />
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="integrations" className="mt-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Radio className="h-4 w-4"/>RFID Reader</CardTitle></CardHeader>
-              <CardContent className="space-y-3">
-                <div><Label className="text-xs">Reader Endpoint</Label><Input placeholder="ws://rfid-reader.local:8080" className="h-9 font-mono text-xs"/></div>
-                <div><Label className="text-xs">Antenna Power (dBm)</Label><Input type="number" defaultValue={25} className="h-9"/></div>
-                <Button size="sm">Test Connection</Button>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><QrCode className="h-4 w-4"/>QR Scanner</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-xs text-muted-foreground">
-                <p>QR scanning uses the device camera or a connected handheld scanner.</p>
-                <p>Supported formats: QR Code, Code 128, EAN-13</p>
-                <p>For handheld scanners, ensure they are configured in keyboard wedge mode.</p>
-              </CardContent>
-            </Card>
+              <div>
+                <button style={btnNeutral}>Save Changes</button>
+              </div>
+            </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="dev" className="mt-4">
-          <Card className="border-amber-200 bg-amber-50/50">
-            <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Code className="h-4 w-4"/>Developer Notes</CardTitle></CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="flex items-start gap-2 p-3 bg-card rounded border">
-                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5"/>
+        {/* ── SECURITY ── */}
+        <TabsContent value="security" className="mt-4">
+          <div style={cardStyle}>
+            <CardHeader icon={Shield} title="Security Settings" />
+            <div style={{ padding: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                {[
+                  { label: "Password Policy",  value: "Min 12 chars, 1 uppercase, 1 number, 1 special" },
+                  { label: "Session Timeout",  value: "60 minutes of inactivity" },
+                  { label: "JWT Token",        value: "RS256, 1-hour expiry, refresh enabled" },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <FieldLabel>{label}</FieldLabel>
+                    <p style={{ fontSize: 13, color: T_SECONDARY }}>{value}</p>
+                  </div>
+                ))}
                 <div>
-                  <p className="font-medium">Sensitive information must only be stored in .env files</p>
-                  <p className="text-muted-foreground mt-1">API keys, database credentials, JWT secrets, and RFID reader credentials should never be hardcoded in source code or displayed in the UI.</p>
+                  <FieldLabel>MFA</FieldLabel>
+                  <span style={{ fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 20, background: "#f0f4ff", color: ACCENT, border: "0.5px solid #c7d2fe" }}>
+                    Available via Clerk
+                  </span>
                 </div>
               </div>
-              <div className="font-mono text-[11px] bg-card p-3 rounded border space-y-1">
-                <p># .env example</p>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── INTEGRATIONS ── */}
+        <TabsContent value="integrations" className="mt-4">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div style={cardStyle}>
+              <CardHeader icon={Radio} title="RFID Reader" />
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                <div>
+                  <FieldLabel>Reader Endpoint</FieldLabel>
+                  <Input placeholder="ws://rfid-reader.local:8080" style={{ height: 34, fontSize: 12, fontFamily: "var(--font-mono)" }} />
+                </div>
+                <div>
+                  <FieldLabel>Antenna Power (dBm)</FieldLabel>
+                  <Input type="number" defaultValue={25} style={{ height: 34, fontSize: 13 }} />
+                </div>
+                <div>
+                  <button style={btnNeutral}>Test Connection</button>
+                </div>
+              </div>
+            </div>
+
+            <div style={cardStyle}>
+              <CardHeader icon={QrCode} title="QR Scanner" />
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  "QR scanning uses the device camera or a connected handheld scanner.",
+                  "Supported formats: QR Code, Code 128, EAN-13",
+                  "For handheld scanners, ensure they are configured in keyboard wedge mode.",
+                ].map((text, i) => (
+                  <p key={i} style={{ fontSize: 13, color: T_SECONDARY }}>{text}</p>
+                ))}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── DEV NOTES ── */}
+        <TabsContent value="dev" className="mt-4">
+          <div style={{ ...cardStyle, border: "0.5px solid #fde68a" }}>
+            <CardHeader icon={Code} title="Developer Notes" />
+            <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+              {/* Warning banner */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 8, background: "#fffbeb", border: "0.5px solid #fde68a" }}>
+                <AlertTriangle size={15} style={{ flexShrink: 0, marginTop: 1, color: "#d97706" }} />
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: T_PRIMARY }}>Sensitive information must only be stored in .env files</p>
+                  <p style={{ fontSize: 13, color: T_SECONDARY, marginTop: 4 }}>API keys, database credentials, JWT secrets, and RFID reader credentials should never be hardcoded in source code or displayed in the UI.</p>
+                </div>
+              </div>
+
+              {/* .env example */}
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 12, background: "#f9fafb", padding: 12, borderRadius: 8, border: "0.5px solid #e8ebf8", lineHeight: 1.8, color: T_SECONDARY }}>
+                <p style={{ color: T_MUTED }}># .env example</p>
                 <p>DATABASE_URL=postgresql://...</p>
                 <p>JWT_SECRET=••••••••••••••••</p>
                 <p>CLERK_SECRET_KEY=••••••••••••••••</p>
                 <p>RFID_READER_AUTH=••••••••••••••••</p>
               </div>
-              <div className="text-muted-foreground">
-                <p><strong>Frontend:</strong> React app on port 3000</p>
-                <p><strong>Backend:</strong> Node.js API on port 4000</p>
+
+              {/* Stack info */}
+              <div style={{ fontSize: 13, color: T_SECONDARY, display: "flex", flexDirection: "column", gap: 4 }}>
+                <p><strong style={{ color: T_PRIMARY }}>Frontend:</strong> React app on port 3000</p>
+                <p><strong style={{ color: T_PRIMARY }}>Backend:</strong> Node.js API on port 4000</p>
                 <p>Both run independently. CORS configured for local dev.</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
-    </AppLayout>);
+    </AppLayout>
+  );
 };
+
 export default SettingsPage;

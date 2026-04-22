@@ -1,15 +1,13 @@
 ﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
-import { ConfirmModal } from "@/components/shared/ConfirmModal";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
-import { canEditMasterData, canDeleteMasterData } from "@/services/rbac";
 import { useToast } from "@/hooks/use-toast";
 import {
   fetchSuppliers, createSupplier, updateSupplier, deleteSupplier,
@@ -20,338 +18,274 @@ import {
   toSessionContext,
 } from "@/services/api";
 
-// ── Inline StatusBadge ──
-const STATUS_CONFIG = {
-  active:   { bg: "#D1FAE5", color: "#065F46", label: "Active" },
-  inactive: { bg: "#F3F4F6", color: "#6B7280", label: "Inactive" },
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const ACCENT       = "#3b5bdb";
+const ACCENT_LIGHT = "#eef2ff";
+const T_PRIMARY    = "#111827";
+const T_SECONDARY  = "#374151";
+const T_LABEL      = "#6b7280";
+const T_MUTED      = "#9ca3af";
+
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 32, padding: "0 12px", borderRadius: 7, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnPrimary = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: ACCENT, color: "#fff" };
+const btnDanger  = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: "#e03131", color: "#fff" };
+const btnOutline = { ...btnBase, height: 28, padding: "0 10px", borderRadius: 6, fontSize: 12, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+
+const cardStyle  = { background: "#fff", borderRadius: 12, border: "0.5px solid #e8ebf8", overflow: "hidden", boxShadow: "0 2px 10px rgba(59,91,219,.07)" };
+const thStyle    = { padding: "9px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap", background: "#fafbff" };
+const tdStyle    = { padding: "12px 14px", borderBottom: "0.5px solid #f0f0f0", fontSize: 13, color: T_PRIMARY };
+
+// ── StatusPill ────────────────────────────────────────────────────────────────
+const STATUS_CFG = {
+  active:   { bg: "#dcfce7", color: "#14532d", border: "#86efac", dot: "#22c55e", label: "Active" },
+  inactive: { bg: "#f3f4f6", color: "#374151", border: "#d1d5db", dot: "#9ca3af", label: "Inactive" },
 };
-function StatusBadge({ status }) {
+
+function StatusPill({ status }) {
   const key = String(status || "").toLowerCase();
-  const cfg = STATUS_CONFIG[key] || { bg: "#F1EFE8", color: "#5F5E5A", label: status || "-" };
+  const c = STATUS_CFG[key] || STATUS_CFG.inactive;
   return (
     <span style={{
-      display: "inline-flex", alignItems: "center",
+      display: "inline-flex", alignItems: "center", gap: 5,
       fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 20,
-      background: cfg.bg, color: cfg.color, whiteSpace: "nowrap",
+      background: c.bg, color: c.color, border: `0.5px solid ${c.border}`, whiteSpace: "nowrap",
     }}>
-      {cfg.label}
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
+      {c.label}
     </span>
   );
 }
 
+// ── FormField ─────────────────────────────────────────────────────────────────
 function FormField({ label, required, children }) {
   return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">
-        {label}{required && <span className="text-destructive ml-1">*</span>}
-      </Label>
+    <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+      <label style={{ fontSize: 12, fontWeight: 600, color: T_LABEL }}>
+        {label}{required && <span style={{ color: "#e03131", marginLeft: 3 }}>*</span>}
+      </label>
       {children}
     </div>
   );
 }
 
-function TableActions({ onEdit, onDelete }) {
+// ── FormCard — wraps the create/edit form ─────────────────────────────────────
+function FormCard({ title, children }) {
   return (
-    <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-      <Button size="sm" variant="outline" className="h-7 text-[11px] px-2" onClick={onEdit}>Edit</Button>
-      <Button size="sm" variant="destructive" className="h-7 text-[11px] px-2" onClick={onDelete}>Delete</Button>
+    <div style={cardStyle}>
+      <div style={{ padding: "11px 16px", background: "#fafbff", borderBottom: "0.5px solid #eef0fc" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T_PRIMARY }}>{title}</span>
+      </div>
+      <div style={{ padding: 16 }}>{children}</div>
     </div>
   );
 }
 
-function SimpleTable({ columns, rows, loading, emptyText = "No data found.", search = "" }) {
+// ── TableCard — wraps the list table ─────────────────────────────────────────
+function TableCard({ children }) {
+  return <div style={cardStyle}>{children}</div>;
+}
+
+// ── Toolbar ───────────────────────────────────────────────────────────────────
+function Toolbar({ search, onSearch, onClear, onRefresh, loading, placeholder }) {
+  return (
+    <div style={{ padding: "11px 16px", display: "flex", alignItems: "center", gap: 8, background: "#fafbff", borderBottom: "0.5px solid #eef0fc", flexWrap: "wrap" }}>
+      <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
+        <svg style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", width: 13, height: 13, color: "#6b7280" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
+        </svg>
+        <input
+          style={{ width: "100%", height: 32, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+          placeholder={placeholder || "Search…"}
+          value={search}
+          onChange={(e) => onSearch(e.target.value)}
+        />
+      </div>
+      <div style={{ flex: 1 }} />
+      <button style={btnNeutral} onClick={onClear}>Clear</button>
+      <button style={{ ...btnNeutral, opacity: loading ? 0.6 : 1 }} onClick={onRefresh} disabled={loading}>Refresh</button>
+    </div>
+  );
+}
+
+// ── Row count footer ──────────────────────────────────────────────────────────
+function TableFooter({ count, search }) {
+  return (
+    <div style={{ padding: "8px 14px", borderTop: "0.5px solid #eef0fc", background: "#fafbff", fontSize: 12, color: T_MUTED }}>
+      {count} record{count === 1 ? "" : "s"}{search ? ` matching "${search}"` : ""}
+    </div>
+  );
+}
+
+// ── Action chips (Edit / Delete) ──────────────────────────────────────────────
+function RowActions({ onEdit, onDelete }) {
+  return (
+    <div style={{ display: "flex", gap: 4 }} onClick={(e) => e.stopPropagation()}>
+      <button style={{ ...btnOutline }} onClick={onEdit}>Edit</button>
+      <button style={{ ...btnBase, height: 28, padding: "0 10px", borderRadius: 6, fontSize: 12, fontWeight: 500, background: "#fee2e2", color: "#b91c1c", border: "0.5px solid #fca5a5" }} onClick={onDelete}>Delete</button>
+    </div>
+  );
+}
+
+// ── Generic table ─────────────────────────────────────────────────────────────
+function DataTable({ cols, rows, loading, emptyText = "No data found.", search = "", selectedId, idKey, onSelect }) {
   const filtered = useMemo(() => {
     if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
-    return rows.filter((row) =>
-      Object.values(row).some((v) => String(v || "").toLowerCase().includes(q))
-    );
+    return rows.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(q)));
   }, [rows, search]);
 
   return (
-    <div className="rounded-md border overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/60">
-          <tr>
-            {columns.map((col) => (
-              <th key={col.key} className="px-3 py-2 text-left font-medium text-xs">{col.label}</th>
-            ))}
-          </tr>
+    <>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>{cols.map((c) => <th key={c.key} style={{ ...thStyle, textAlign: c.right ? "right" : "left" }}>{c.label}</th>)}</tr>
         </thead>
         <tbody>
-          {loading && (
-            <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-muted-foreground">Loading...</td></tr>
-          )}
-          {!loading && filtered.length === 0 && (
-            <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-muted-foreground">{search ? "No results match your search." : emptyText}</td></tr>
-          )}
-          {!loading && filtered.map((row, i) => (
-            <tr key={row.id || i} className="border-t hover:bg-muted/30">
-              {columns.map((col) => (
-                <td key={col.key} className="px-3 py-2">
-                  {col.render ? col.render(row) : (row[col.key] ?? "-")}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {loading && <tr><td colSpan={cols.length} style={{ padding: "28px 14px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>Loading…</td></tr>}
+          {!loading && filtered.length === 0 && <tr><td colSpan={cols.length} style={{ padding: "28px 14px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>{search ? "No results match your search." : emptyText}</td></tr>}
+          {!loading && filtered.map((row, i) => {
+            const rowId = idKey ? row[idKey] : i;
+            const isSel = selectedId !== undefined && selectedId === rowId;
+            return (
+              <tr key={rowId}
+                style={{ cursor: onSelect ? "pointer" : "default", background: isSel ? ACCENT_LIGHT : "transparent" }}
+                onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#f5f7ff"; }}
+                onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
+                onClick={() => onSelect && onSelect(isSel ? "" : rowId)}
+              >
+                {cols.map((c) => (
+                  <td key={c.key} style={{ ...tdStyle, textAlign: c.right ? "right" : "left" }}>
+                    {c.render ? c.render(row) : (row[c.key] ?? <span style={{ color: T_MUTED }}>—</span>)}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
-      {!loading && filtered.length > 0 && (
-        <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground">
-          {filtered.length} record{filtered.length === 1 ? "" : "s"}{search ? ` matching "${search}"` : ""}
+      {!loading && filtered.length > 0 && <TableFooter count={filtered.length} search={search} />}
+    </>
+  );
+}
+
+// ── Detail panel (used by Supplier tab) ───────────────────────────────────────
+function SupplierDetailPanel({ supplier, onEdit, onDelete }) {
+  if (!supplier) return null;
+  return (
+    <div style={{ borderTop: "2px solid #3b5bdb", background: "#fff" }}>
+      <div style={{ padding: "16px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: T_PRIMARY }}>{supplier.supplier_id}</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>{supplier.supplier_name}</span>
+          <StatusPill status={supplier.is_active ? "active" : "inactive"} />
         </div>
-      )}
-    </div>
-  );
-}
-
-function SectionDivider({ title }) {
-  return (
-    <div className="flex items-center gap-3 my-1">
-      <div className="h-px flex-1 bg-border" />
-      <span className="text-xs text-muted-foreground uppercase tracking-wide">{title}</span>
-      <div className="h-px flex-1 bg-border" />
-    </div>
-  );
-}
-
-
-function SupplierTable({ rows, loading, search, selectedId, onSelect, onEdit, onDelete }) {
-  const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
-    const q = search.trim().toLowerCase();
-    return rows.filter((row) =>
-      Object.values(row).some((v) => String(v || "").toLowerCase().includes(q))
-    );
-  }, [rows, search]);
-
-  const selected = useMemo(() => filtered.find((r) => r.supplier_id === selectedId) || null, [filtered, selectedId]);
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-md border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/60">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium">Supplier ID</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Supplier Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Email</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Phone</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Status</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">Loading...</td></tr>
-            )}
-            {!loading && filtered.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">{search ? "No results match your search." : "No suppliers found."}</td></tr>
-            )}
-            {!loading && filtered.map((row) => (
-              <tr
-                key={row.supplier_id}
-                className={`border-t cursor-pointer hover:bg-accent/40 ${selectedId === row.supplier_id ? "bg-accent/30" : ""}`}
-                onClick={() => onSelect(selectedId === row.supplier_id ? "" : row.supplier_id)}
-              >
-                <td className="px-3 py-2 font-mono text-xs">{row.supplier_id}</td>
-                <td className="px-3 py-2">{row.supplier_name}</td>
-                <td className="px-3 py-2 text-muted-foreground">{row.email || "-"}</td>
-                <td className="px-3 py-2 text-muted-foreground">{row.phone || "-"}</td>
-                <td className="px-3 py-2"><StatusBadge status={row.is_active ? "active" : "inactive"} /></td>
-                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  <TableActions
-                    onEdit={() => onEdit(row)}
-                    onDelete={() => onDelete(row)}
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!loading && filtered.length > 0 && (
-          <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground">
-            {filtered.length} record{filtered.length === 1 ? "" : "s"}{search ? ` matching "${search}"` : ""}
-          </div>
-        )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14, marginBottom: 14 }}>
+          {[
+            { label: "Contact Person", value: supplier.contact_person },
+            { label: "Email",          value: supplier.email },
+            { label: "Phone",          value: supplier.phone },
+            { label: "Address",        value: supplier.address },
+          ].map(({ label, value }) => (
+            <div key={label}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</p>
+              <p style={{ fontSize: 13, color: value ? T_PRIMARY : T_MUTED, fontStyle: value ? "normal" : "italic" }}>{value || "Not provided"}</p>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button style={btnNeutral} onClick={() => onEdit(supplier)}>Edit Supplier</button>
+          <button style={btnDanger} onClick={() => onDelete(supplier)}>Delete</button>
+        </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Detail panel */}
-      {selected && (
-        <div className="rounded-lg border bg-card overflow-hidden shadow-sm">
-          {/* Header strip */}
-          <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded text-muted-foreground">{selected.supplier_id}</span>
-              <span className="text-sm">{selected.supplier_name}</span>
-            </div>
-            <StatusBadge status={selected.is_active ? "active" : "inactive"} />
-          </div>
-
-          {/* Info grid */}
-          <div className="px-4 py-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 text-sm">
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-muted-foreground">Contact Person</span>
-              <span>{selected.contact_person || <span className="text-muted-foreground italic">Not provided</span>}</span>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-muted-foreground">Email</span>
-              {selected.email
-                ? <a href={`mailto:${selected.email}`} className="text-blue-600 hover:underline">{selected.email}</a>
-                : <span className="text-muted-foreground italic">Not provided</span>}
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <span className="text-xs text-muted-foreground">Phone</span>
-              {selected.phone
-                ? <a href={`tel:${selected.phone}`} className="text-blue-600 hover:underline">{selected.phone}</a>
-                : <span className="text-muted-foreground italic">Not provided</span>}
-            </div>
-            {selected.address ? (
-              <div className="flex flex-col gap-0.5 sm:col-span-2 md:col-span-3">
-                <span className="text-xs text-muted-foreground">Address</span>
-                <span>{selected.address}</span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs text-muted-foreground">Address</span>
-                <span className="text-muted-foreground italic">Not provided</span>
-              </div>
-            )}
-          </div>
-
-          {/* Action footer */}
-          <div className="px-4 py-3 border-t bg-muted/10 flex items-center gap-2">
-            <Button size="sm" variant="outline" className="h-7 text-xs px-3" onClick={() => onEdit(selected)}>
-              Edit Supplier
-            </Button>
-            <Button size="sm" variant="destructive" className="h-7 text-xs px-3" onClick={() => onDelete(selected)}>
-              Delete
-            </Button>
+// ── Delete confirmation modal ─────────────────────────────────────────────────
+function DeleteModal({ open, onClose, onConfirm, title, description }) {
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <p style={{ fontSize: 13, color: T_SECONDARY }}>{description}</p>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 8 }}>
+            <button style={btnNeutral} onClick={onClose}>Back</button>
+            <button style={btnDanger} onClick={onConfirm}>Confirm Delete</button>
           </div>
         </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-
-function CustomerTable({ rows, loading, search, onEdit, onDelete }) {
-  const filtered = useMemo(() => {
-    if (!search.trim()) return rows;
-    const q = search.trim().toLowerCase();
-    return rows.filter((row) =>
-      Object.values(row).some((v) => String(v || "").toLowerCase().includes(q))
-    );
-  }, [rows, search]);
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-md border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/60">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium">Customer ID</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Email</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Phone</th>
-              <th className="px-3 py-2 text-left text-xs font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">Loading...</td></tr>
-            )}
-            {!loading && filtered.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">{search ? "No results match your search." : "No customers found."}</td></tr>
-            )}
-            {!loading && filtered.map((row) => (
-              <tr key={row.customer_id} className="border-t hover:bg-muted/30">
-                <td className="px-3 py-2 font-mono text-xs">{row.customer_id}</td>
-                <td className="px-3 py-2">{row.customer_name}</td>
-                <td className="px-3 py-2">{row.contact || "-"}</td>
-                <td className="px-3 py-2">{row.phone || "-"}</td>
-                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  <TableActions onEdit={() => onEdit(row)} onDelete={() => onDelete(row)} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!loading && filtered.length > 0 && (
-          <div className="px-3 py-2 border-t bg-muted/20 text-xs text-muted-foreground">
-            {filtered.length} record{filtered.length === 1 ? "" : "s"}{search ? ` matching "${search}"` : ""}
-          </div>
-        )}
-      </div>
-
-
-    </div>
-  );
-}
-
+// ── Page ──────────────────────────────────────────────────────────────────────
 const MasterDataPage = () => {
-  const auth = useAuth();
+  const auth      = useAuth();
   const { toast } = useToast();
-  const session = useMemo(() => toSessionContext(auth), [auth]);
-  const userRole = auth.currentUser?.role || "";
+  const session   = useMemo(() => toSessionContext(auth), [auth]);
 
-  // ── Suppliers ──
-  const [supplierRows, setSupplierRows] = useState([]);
-  const [supplierLoading, setSupplierLoading] = useState(true);
-  const [supplierError, setSupplierError] = useState("");
-  const [savingSupplier, setSavingSupplier] = useState(false);
+  // ── Suppliers ────────────────────────────────────────────────────────────
+  const [supplierRows, setSupplierRows]               = useState([]);
+  const [supplierLoading, setSupplierLoading]         = useState(true);
+  const [supplierError, setSupplierError]             = useState("");
+  const [savingSupplier, setSavingSupplier]           = useState(false);
   const [supplierDeleteTarget, setSupplierDeleteTarget] = useState(null);
-  const [supplierForm, setSupplierForm] = useState({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true });
-  const [supplierFormError, setSupplierFormError] = useState("");
-  const [supplierSearch, setSupplierSearch] = useState("");
-  const [selectedSupplierId, setSelectedSupplierId] = useState("");
+  const [supplierForm, setSupplierForm]               = useState({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true });
+  const [supplierFormError, setSupplierFormError]     = useState("");
+  const [supplierSearch, setSupplierSearch]           = useState("");
+  const [selectedSupplierId, setSelectedSupplierId]   = useState("");
   const isEditingSupplier = Boolean(supplierForm.supplier_id);
 
-  // ── SKU ──
-  const [skuRows, setSkuRows] = useState([]);
-  const [skuLoading, setSkuLoading] = useState(true);
-  const [skuError, setSkuError] = useState("");
-  const [savingSku, setSavingSku] = useState(false);
-  const [skuDeleteTarget, setSkuDeleteTarget] = useState(null);
-  const [skuForm, setSkuForm] = useState({ sku_id: "", description: "", uom_id: "EA", epc_value: "" });
-  const [skuFormError, setSkuFormError] = useState("");
-  const [skuSearch, setSkuSearch] = useState("");
+  // ── SKU ───────────────────────────────────────────────────────────────────
+  const [skuRows, setSkuRows]                   = useState([]);
+  const [skuLoading, setSkuLoading]             = useState(true);
+  const [skuError, setSkuError]                 = useState("");
+  const [savingSku, setSavingSku]               = useState(false);
+  const [skuDeleteTarget, setSkuDeleteTarget]   = useState(null);
+  const [skuForm, setSkuForm]                   = useState({ sku_id: "", description: "", uom_id: "EA", epc_value: "" });
+  const [skuFormError, setSkuFormError]         = useState("");
+  const [skuSearch, setSkuSearch]               = useState("");
   const isEditingSku = Boolean(skuForm.sku_id && skuRows.some((r) => r.sku_id === skuForm.sku_id));
 
-  // ── Locations ──
-  const [locationRows, setLocationRows] = useState([]);
-  const [locationLoading, setLocationLoading] = useState(true);
-  const [locationError, setLocationError] = useState("");
-  const [savingLocation, setSavingLocation] = useState(false);
+  // ── Locations ─────────────────────────────────────────────────────────────
+  const [locationRows, setLocationRows]                 = useState([]);
+  const [locationLoading, setLocationLoading]           = useState(true);
+  const [locationError, setLocationError]               = useState("");
+  const [savingLocation, setSavingLocation]             = useState(false);
   const [locationDeleteTarget, setLocationDeleteTarget] = useState(null);
-  const [locationForm, setLocationForm] = useState({ location_id: "", location_code: "", zone_id: "", capacity: "100" });
-  const [locationFormError, setLocationFormError] = useState("");
-  const [locationSearch, setLocationSearch] = useState("");
-  const [zones, setZones] = useState([]);
+  const [locationForm, setLocationForm]                 = useState({ location_id: "", location_code: "", zone_id: "", capacity: "100" });
+  const [locationFormError, setLocationFormError]       = useState("");
+  const [locationSearch, setLocationSearch]             = useState("");
+  const [zones, setZones]                               = useState([]);
   const isEditingLocation = Boolean(locationForm.location_id);
 
-  // ── Warehouses ──
-  const [warehouseRows, setWarehouseRows] = useState([]);
-  const [warehouseLoading, setWarehouseLoading] = useState(true);
-  const [savingWarehouse, setSavingWarehouse] = useState(false);
-  const [warehouseForm, setWarehouseForm] = useState({ warehouse_id: "", warehouse_name: "", city: "", country: "" });
-  const [warehouseSearch, setWarehouseSearch] = useState("");
-  const [isEditingWarehouse, setIsEditingWarehouse] = useState(false);
+  // ── Warehouses ────────────────────────────────────────────────────────────
+  const [warehouseRows, setWarehouseRows]                 = useState([]);
+  const [warehouseLoading, setWarehouseLoading]           = useState(true);
+  const [savingWarehouse, setSavingWarehouse]             = useState(false);
+  const [warehouseForm, setWarehouseForm]                 = useState({ warehouse_id: "", warehouse_name: "", city: "", country: "" });
+  const [warehouseSearch, setWarehouseSearch]             = useState("");
+  const [isEditingWarehouse, setIsEditingWarehouse]       = useState(false);
   const [warehouseDeleteTarget, setWarehouseDeleteTarget] = useState(null);
-  const [warehouseFormError, setWarehouseFormError] = useState("");
+  const [warehouseFormError, setWarehouseFormError]       = useState("");
 
-  // ── Customers ──
-  const [customerRows, setCustomerRows] = useState([]);
-  const [customerLoading, setCustomerLoading] = useState(true);
-  const [customerError, setCustomerError] = useState("");
-  const [savingCustomer, setSavingCustomer] = useState(false);
+  // ── Customers ─────────────────────────────────────────────────────────────
+  const [customerRows, setCustomerRows]                 = useState([]);
+  const [customerLoading, setCustomerLoading]           = useState(true);
+  const [customerError, setCustomerError]               = useState("");
+  const [savingCustomer, setSavingCustomer]             = useState(false);
   const [customerDeleteTarget, setCustomerDeleteTarget] = useState(null);
-  const [customerForm, setCustomerForm] = useState({ customer_id: "", customer_name: "", contact: "", phone: "" });
-  const [customerFormError, setCustomerFormError] = useState("");
-  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerForm, setCustomerForm]                 = useState({ customer_id: "", customer_name: "", contact: "", phone: "" });
+  const [customerFormError, setCustomerFormError]       = useState("");
+  const [customerSearch, setCustomerSearch]             = useState("");
   const isEditingCustomer = Boolean(customerForm.customer_id);
 
-  // ── Load functions ──
+  // ── Selected supplier detail ──────────────────────────────────────────────
+  const selectedSupplier = useMemo(() => supplierRows.find((r) => r.supplier_id === selectedSupplierId) || null, [supplierRows, selectedSupplierId]);
+
+  // ── Load functions ────────────────────────────────────────────────────────
   const loadSuppliers = useCallback(async () => {
     if (!session?.tenant_id) return;
     try { setSupplierLoading(true); setSupplierError(""); const data = await fetchSuppliers(session); setSupplierRows(Array.isArray(data) ? data : []); }
@@ -397,35 +331,20 @@ const MasterDataPage = () => {
   }, [session]);
 
   useEffect(() => { loadSuppliers(); }, [loadSuppliers]);
-  useEffect(() => { loadSkus(); }, [loadSkus]);
-  useEffect(() => { loadLocations(); }, [loadLocations]);
+  useEffect(() => { loadSkus(); },       [loadSkus]);
+  useEffect(() => { loadLocations(); },  [loadLocations]);
   useEffect(() => { loadWarehouses(); }, [loadWarehouses]);
-  useEffect(() => { loadCustomers(); }, [loadCustomers]);
+  useEffect(() => { loadCustomers(); },  [loadCustomers]);
 
-  // ── Supplier handlers ──
+  // ── Supplier handlers ─────────────────────────────────────────────────────
   const handleSaveSupplier = async () => {
     if (!supplierForm.supplier_name.trim()) { setSupplierFormError("Supplier name is required"); return; }
     if (!supplierForm.email.trim()) { setSupplierFormError("Email is required"); return; }
     if (!supplierForm.phone.trim()) { setSupplierFormError("Phone number is required"); return; }
-    // Basic email format check
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supplierForm.email.trim())) {
-      setSupplierFormError("Please enter a valid email address"); return;
-    }
-    // Duplicate email check
-    const duplicateEmail = supplierRows.find((r) =>
-      r.email?.trim().toLowerCase() === supplierForm.email.trim().toLowerCase() &&
-      r.supplier_id !== supplierForm.supplier_id
-    );
-    if (duplicateEmail) { setSupplierFormError(`Email already used by ${duplicateEmail.supplier_id}`); return; }
-
-    const payload = {
-      supplier_name: supplierForm.supplier_name.trim(),
-      contact_person: supplierForm.contact_person.trim() || null,
-      email: supplierForm.email.trim(),
-      phone: supplierForm.phone.trim(),
-      address: supplierForm.address.trim() || null,
-      is_active: supplierForm.is_active,
-    };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(supplierForm.email.trim())) { setSupplierFormError("Please enter a valid email address"); return; }
+    const dupEmail = supplierRows.find((r) => r.email?.trim().toLowerCase() === supplierForm.email.trim().toLowerCase() && r.supplier_id !== supplierForm.supplier_id);
+    if (dupEmail) { setSupplierFormError(`Email already used by ${dupEmail.supplier_id}`); return; }
+    const payload = { supplier_name: supplierForm.supplier_name.trim(), contact_person: supplierForm.contact_person.trim() || null, email: supplierForm.email.trim(), phone: supplierForm.phone.trim(), address: supplierForm.address.trim() || null, is_active: supplierForm.is_active };
     try {
       setSavingSupplier(true); setSupplierFormError("");
       if (isEditingSupplier) {
@@ -435,8 +354,7 @@ const MasterDataPage = () => {
         toast({ title: "Supplier updated" });
       } else {
         const created = await createSupplier(session, payload);
-        const enriched = { ...(created?.data ?? created), ...payload };
-        setSupplierRows((c) => [enriched, ...c]);
+        setSupplierRows((c) => [{ ...(created?.data ?? created), ...payload }, ...c]);
         toast({ title: "Supplier created" });
       }
       setSupplierForm({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true });
@@ -451,23 +369,19 @@ const MasterDataPage = () => {
     finally { setSupplierDeleteTarget(null); }
   };
 
-  // ── SKU handlers ──
+  // ── SKU handlers ──────────────────────────────────────────────────────────
   const handleSaveSku = async () => {
     if (!skuForm.description.trim()) { setSkuFormError("Description is required"); return; }
     if (!isEditingSku && !skuForm.sku_id.trim()) { setSkuFormError("SKU ID is required"); return; }
     try {
       setSavingSku(true); setSkuFormError("");
       if (isEditingSku) {
-        // eslint-disable-next-line no-console
-        console.debug("[handleSaveSku] updating sku_id:", skuForm.sku_id);
         const result = await updateSkuApi(session, skuForm.sku_id, { description: skuForm.description.trim(), uom_id: skuForm.uom_id, epc_value: skuForm.epc_value || null });
-        const updated = result?.data ?? result;
-        setSkuRows((c) => c.map((r) => r.sku_id === updated.sku_id ? updated : r));
+        setSkuRows((c) => c.map((r) => r.sku_id === (result?.data ?? result).sku_id ? (result?.data ?? result) : r));
         toast({ title: "SKU updated" });
       } else {
         const result = await createSkuApi(session, { sku_id: skuForm.sku_id.trim().toUpperCase(), description: skuForm.description.trim(), uom_id: skuForm.uom_id, epc_value: skuForm.epc_value || null });
-        const created = result?.data ?? result;
-        setSkuRows((c) => [created, ...c]);
+        setSkuRows((c) => [result?.data ?? result, ...c]);
         toast({ title: "SKU created" });
       }
       setSkuForm({ sku_id: "", description: "", uom_id: "EA", epc_value: "" });
@@ -482,38 +396,26 @@ const MasterDataPage = () => {
     finally { setSkuDeleteTarget(null); }
   };
 
-  // ── Location handlers ──
+  // ── Location handlers ─────────────────────────────────────────────────────
   const handleSaveLocation = async () => {
     if (!locationForm.location_code.trim()) { setLocationFormError("Location code is required"); return; }
     if (!locationForm.zone_id) { setLocationFormError("Zone is required"); return; }
-
-    // Check duplicate location_code within same zone
-    const duplicate = locationRows.find((r) =>
-      r.location_code.trim().toLowerCase() === locationForm.location_code.trim().toLowerCase() &&
-      r.zone_id === locationForm.zone_id &&
-      r.location_id !== locationForm.location_id // allow same record when editing
-    );
-    if (duplicate) {
-      setLocationFormError(`Location code "${locationForm.location_code}" already exists in this zone (${duplicate.location_id})`);
-      return;
-    }
-
+    const dup = locationRows.find((r) => r.location_code.trim().toLowerCase() === locationForm.location_code.trim().toLowerCase() && r.zone_id === locationForm.zone_id && r.location_id !== locationForm.location_id);
+    if (dup) { setLocationFormError(`Location code "${locationForm.location_code}" already exists in this zone (${dup.location_id})`); return; }
     try {
       setSavingLocation(true); setLocationFormError("");
+      const payload = { location_code: locationForm.location_code.trim(), zone_id: locationForm.zone_id, capacity: Number(locationForm.capacity) || 100 };
       if (isEditingLocation) {
-        const result = await updateLocationApi(session, locationForm.location_id, { location_code: locationForm.location_code.trim(), zone_id: locationForm.zone_id, capacity: Number(locationForm.capacity) || 100 });
+        const result = await updateLocationApi(session, locationForm.location_id, payload);
         const updated = result?.data ?? result;
-        // Enrich with zone_name from zones list since API may not return it
-        const matchedZone = zones.find((z) => z.zone_id === updated.zone_id);
-        const enriched = { ...updated, zone_name: matchedZone?.zone_name || updated.zone_name || updated.zone_id };
-        setLocationRows((c) => c.map((r) => r.location_id === enriched.location_id ? enriched : r));
+        const zone = zones.find((z) => z.zone_id === updated.zone_id);
+        setLocationRows((c) => c.map((r) => r.location_id === updated.location_id ? { ...updated, zone_name: zone?.zone_name || updated.zone_id } : r));
         toast({ title: "Location updated" });
       } else {
-        const result = await createLocationApi(session, { location_code: locationForm.location_code.trim(), zone_id: locationForm.zone_id, capacity: Number(locationForm.capacity) || 100 });
+        const result = await createLocationApi(session, payload);
         const created = result?.data ?? result;
-        const matchedZone = zones.find((z) => z.zone_id === created.zone_id);
-        const enrichedCreated = { ...created, zone_name: matchedZone?.zone_name || created.zone_name || created.zone_id };
-        setLocationRows((c) => [enrichedCreated, ...c]);
+        const zone = zones.find((z) => z.zone_id === created.zone_id);
+        setLocationRows((c) => [{ ...created, zone_name: zone?.zone_name || created.zone_id }, ...c]);
         toast({ title: "Location created" });
       }
       setLocationForm({ location_id: "", location_code: "", zone_id: "", capacity: "100" });
@@ -528,33 +430,20 @@ const MasterDataPage = () => {
     finally { setLocationDeleteTarget(null); }
   };
 
-  // ── Warehouse handlers ──
+  // ── Warehouse handlers ────────────────────────────────────────────────────
   const handleSaveWarehouse = async () => {
-    if (!warehouseForm.warehouse_name.trim()) { setWarehouseFormError("Warehouse Name is required"); return; }
+    if (!warehouseForm.warehouse_name.trim()) { setWarehouseFormError("Warehouse name is required"); return; }
     if (!isEditingWarehouse && !warehouseForm.warehouse_id.trim()) { setWarehouseFormError("Warehouse ID is required"); return; }
-    // Duplicate check
-    const duplicate = warehouseRows.find((r) =>
-      r.warehouse_id.trim().toUpperCase() === warehouseForm.warehouse_id.trim().toUpperCase() &&
-      !isEditingWarehouse
-    );
-    if (duplicate) { setWarehouseFormError(`Warehouse ID "${warehouseForm.warehouse_id}" already exists`); return; }
+    const dup = warehouseRows.find((r) => r.warehouse_id.trim().toUpperCase() === warehouseForm.warehouse_id.trim().toUpperCase() && !isEditingWarehouse);
+    if (dup) { setWarehouseFormError(`Warehouse ID "${warehouseForm.warehouse_id}" already exists`); return; }
     try {
       setSavingWarehouse(true); setWarehouseFormError("");
       if (isEditingWarehouse) {
-        // Update name, city, country — warehouse_id is immutable
-        setWarehouseRows((c) => c.map((r) => r.warehouse_id === warehouseForm.warehouse_id
-          ? { ...r, warehouse_name: warehouseForm.warehouse_name.trim(), city: warehouseForm.city.trim(), country: warehouseForm.country.trim() }
-          : r));
+        setWarehouseRows((c) => c.map((r) => r.warehouse_id === warehouseForm.warehouse_id ? { ...r, warehouse_name: warehouseForm.warehouse_name.trim(), city: warehouseForm.city.trim(), country: warehouseForm.country.trim() } : r));
         toast({ title: "Warehouse updated" });
       } else {
-        const result = await createWarehouseApi(session, {
-          warehouse_id: warehouseForm.warehouse_id.trim().toUpperCase(),
-          warehouse_name: warehouseForm.warehouse_name.trim(),
-          city: warehouseForm.city.trim(),
-          country: warehouseForm.country.trim(),
-        });
-        const created = result?.data ?? result;
-        setWarehouseRows((c) => [...c, created]);
+        const result = await createWarehouseApi(session, { warehouse_id: warehouseForm.warehouse_id.trim().toUpperCase(), warehouse_name: warehouseForm.warehouse_name.trim(), city: warehouseForm.city.trim(), country: warehouseForm.country.trim() });
+        setWarehouseRows((c) => [...c, result?.data ?? result]);
         toast({ title: "Warehouse created" });
       }
       setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" });
@@ -570,31 +459,24 @@ const MasterDataPage = () => {
     setWarehouseDeleteTarget(null);
   };
 
-  // ── Customer handlers ──
+  // ── Customer handlers ─────────────────────────────────────────────────────
   const handleSaveCustomer = async () => {
     if (!customerForm.customer_name.trim()) { setCustomerFormError("Customer name is required"); return; }
     if (!customerForm.contact.trim()) { setCustomerFormError("Email is required"); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerForm.contact.trim())) {
-      setCustomerFormError("Please enter a valid email address"); return;
-    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerForm.contact.trim())) { setCustomerFormError("Please enter a valid email address"); return; }
     if (!customerForm.phone.trim()) { setCustomerFormError("Phone number is required"); return; }
-    const duplicateEmail = customerRows.find((r) =>
-      r.contact?.trim().toLowerCase() === customerForm.contact.trim().toLowerCase() &&
-      r.customer_id !== customerForm.customer_id
-    );
-    if (duplicateEmail) { setCustomerFormError(`Email already used by ${duplicateEmail.customer_id}`); return; }
+    const dupEmail = customerRows.find((r) => r.contact?.trim().toLowerCase() === customerForm.contact.trim().toLowerCase() && r.customer_id !== customerForm.customer_id);
+    if (dupEmail) { setCustomerFormError(`Email already used by ${dupEmail.customer_id}`); return; }
     try {
       setSavingCustomer(true); setCustomerFormError("");
       const payload = { customer_name: customerForm.customer_name.trim(), contact: customerForm.contact.trim(), phone: customerForm.phone.trim() };
       if (isEditingCustomer) {
         const result = await updateCustomerApi(session, customerForm.customer_id, payload);
-        const enriched = { ...(result?.data ?? result), ...payload, customer_id: customerForm.customer_id };
-        setCustomerRows((c) => c.map((r) => r.customer_id === enriched.customer_id ? enriched : r));
+        setCustomerRows((c) => c.map((r) => r.customer_id === customerForm.customer_id ? { ...(result?.data ?? result), ...payload, customer_id: customerForm.customer_id } : r));
         toast({ title: "Customer updated" });
       } else {
         const result = await createCustomerApi(session, payload);
-        const enriched = { ...(result?.data ?? result), ...payload };
-        setCustomerRows((c) => [enriched, ...c]);
+        setCustomerRows((c) => [{ ...(result?.data ?? result), ...payload }, ...c]);
         toast({ title: "Customer created" });
       }
       setCustomerForm({ customer_id: "", customer_name: "", contact: "", phone: "" });
@@ -609,10 +491,26 @@ const MasterDataPage = () => {
     finally { setCustomerDeleteTarget(null); }
   };
 
+  // ── Shared form footer ────────────────────────────────────────────────────
+  const FormFooter = ({ isEditing, onCancelEdit, onClear, onSave, saving, saveLabel, editLabel }) => (
+    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 12, borderTop: "0.5px solid #eef0fc", marginTop: 4 }}>
+      {isEditing && <button style={btnNeutral} onClick={onCancelEdit} disabled={saving}>Cancel Edit</button>}
+      <button style={btnNeutral} onClick={onClear} disabled={saving}>Clear</button>
+      <button style={{ ...btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={onSave} disabled={saving}>
+        {saving ? "Saving…" : isEditing ? editLabel : saveLabel}
+      </button>
+    </div>
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <AppLayout>
       <Breadcrumbs items={[{ label: "Master Data" }]} />
-      <h1 className="text-2xl font-bold mb-4">Master Data</h1>
+
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Master Data</h1>
+        <p style={{ fontSize: 13, color: T_SECONDARY }}>Manage SKUs, locations, warehouses, suppliers and customers</p>
+      </div>
 
       <Tabs defaultValue="sku">
         <TabsList>
@@ -623,304 +521,246 @@ const MasterDataPage = () => {
           <TabsTrigger value="customers">Customers</TabsTrigger>
         </TabsList>
 
-        {/* ── SKU TAB ── */}
+        {/* ── SKU ── */}
         <TabsContent value="sku" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{isEditingSku ? `Edit SKU — ${skuForm.sku_id}` : "New SKU"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <FormField label="SKU ID" required>
-                  <Input value={skuForm.sku_id} onChange={(e) => setSkuForm((c) => ({ ...c, sku_id: e.target.value }))} placeholder="e.g. SKU000006" disabled={isEditingSku || savingSku} />
-                </FormField>
-                <FormField label="Description" required>
-                  <Input value={skuForm.description} onChange={(e) => setSkuForm((c) => ({ ...c, description: e.target.value }))} placeholder="e.g. Industrial Bearing 6205" disabled={savingSku} />
-                </FormField>
-                <FormField label="UOM">
-                  <Select value={skuForm.uom_id} onValueChange={(v) => setSkuForm((c) => ({ ...c, uom_id: v }))} disabled={savingSku}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="EA">EA — Each</SelectItem>
-                      <SelectItem value="BOX">BOX — Box</SelectItem>
-                      <SelectItem value="PAIR">PAIR — Pair</SelectItem>
-                      <SelectItem value="KG">KG — Kilogram</SelectItem>
-                      <SelectItem value="LTR">LTR — Litre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="EPC Value (RFID)">
-                  <Input value={skuForm.epc_value} onChange={(e) => setSkuForm((c) => ({ ...c, epc_value: e.target.value }))} placeholder="e.g. EPC:300833B2DDD901..." disabled={savingSku} />
-                </FormField>
-              </div>
-              {skuFormError && <p className="text-xs text-destructive">{skuFormError}</p>}
-              {skuError && <p className="text-xs text-destructive">{skuError}</p>}
-              <div className="flex gap-2 justify-end pt-1">
-                {isEditingSku && <Button size="sm" variant="outline" onClick={() => { setSkuForm({ sku_id: "", description: "", uom_id: "EA", epc_value: "" }); setSkuFormError(""); }} disabled={savingSku}>Cancel Edit</Button>}
-                <Button size="sm" variant="outline" onClick={() => setSkuForm({ sku_id: "", description: "", uom_id: "EA", epc_value: "" })} disabled={savingSku}>Clear</Button>
-                <Button size="sm" onClick={handleSaveSku} disabled={savingSku}>{savingSku ? "Saving..." : isEditingSku ? "Update SKU" : "Add SKU"}</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <FormCard title={isEditingSku ? `Edit SKU — ${skuForm.sku_id}` : "New SKU"}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <FormField label="SKU ID" required>
+                <Input value={skuForm.sku_id} onChange={(e) => setSkuForm((c) => ({ ...c, sku_id: e.target.value }))} placeholder="e.g. SKU000006" disabled={isEditingSku || savingSku} />
+              </FormField>
+              <FormField label="Description" required>
+                <Input value={skuForm.description} onChange={(e) => setSkuForm((c) => ({ ...c, description: e.target.value }))} placeholder="e.g. Industrial Bearing 6205" disabled={savingSku} />
+              </FormField>
+              <FormField label="UOM">
+                <Select value={skuForm.uom_id} onValueChange={(v) => setSkuForm((c) => ({ ...c, uom_id: v }))} disabled={savingSku}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="EA">EA — Each</SelectItem>
+                    <SelectItem value="BOX">BOX — Box</SelectItem>
+                    <SelectItem value="PAIR">PAIR — Pair</SelectItem>
+                    <SelectItem value="KG">KG — Kilogram</SelectItem>
+                    <SelectItem value="LTR">LTR — Litre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="EPC Value (RFID)">
+                <Input value={skuForm.epc_value} onChange={(e) => setSkuForm((c) => ({ ...c, epc_value: e.target.value }))} placeholder="e.g. EPC:300833B2DDD901…" disabled={savingSku} />
+              </FormField>
+            </div>
+            {(skuFormError || skuError) && <p style={{ fontSize: 12, color: "#991b1b", marginTop: 8 }}>{skuFormError || skuError}</p>}
+            <FormFooter isEditing={isEditingSku} saving={savingSku}
+              onCancelEdit={() => { setSkuForm({ sku_id: "", description: "", uom_id: "EA", epc_value: "" }); setSkuFormError(""); }}
+              onClear={() => setSkuForm({ sku_id: "", description: "", uom_id: "EA", epc_value: "" })}
+              onSave={handleSaveSku} saveLabel="Add SKU" editLabel="Update SKU" />
+          </FormCard>
 
-          <SectionDivider title="SKU List" />
-
-          <div className="flex flex-wrap gap-2 mb-2">
-            <Input className="h-9 min-w-[200px] flex-1" placeholder="Search SKU ID, description..." value={skuSearch} onChange={(e) => setSkuSearch(e.target.value)} />
-            {skuSearch && <Button variant="outline" className="h-9" onClick={() => setSkuSearch("")}>Clear</Button>}
-            <Button variant="outline" className="h-9" onClick={loadSkus} disabled={skuLoading}>Refresh</Button>
-          </div>
-
-          <SimpleTable loading={skuLoading} rows={skuRows} search={skuSearch} emptyText="No SKUs found."
-            columns={[
-              { key: "sku_id", label: "SKU ID", render: (r) => <span className="font-mono text-xs">{r.sku_id}</span> },
-              { key: "description", label: "Description" },
-              { key: "uom_id", label: "UOM" },
-              { key: "epc_value", label: "EPC Value", render: (r) => r.epc_value ? <span className="font-mono text-xs">{r.epc_value}</span> : "-" },
-              { key: "actions", label: "Actions", render: (r) => <TableActions onEdit={() => { setSkuForm({ sku_id: r.sku_id, description: r.description, uom_id: r.uom_id || "EA", epc_value: r.epc_value || "" }); setSkuFormError(""); }} onDelete={() => setSkuDeleteTarget(r)} /> },
-            ]}
-          />
+          <TableCard>
+            <Toolbar search={skuSearch} onSearch={setSkuSearch} onClear={() => setSkuSearch("")} onRefresh={loadSkus} loading={skuLoading} placeholder="Search SKU ID, description…" />
+            <DataTable loading={skuLoading} rows={skuRows} search={skuSearch} emptyText="No SKUs found."
+              cols={[
+                { key: "sku_id",      label: "SKU ID",      render: (r) => <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: T_SECONDARY }}>{r.sku_id}</span> },
+                { key: "description", label: "Description" },
+                { key: "uom_id",      label: "UOM" },
+                { key: "epc_value",   label: "EPC Value",   render: (r) => r.epc_value ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: T_SECONDARY }}>{r.epc_value}</span> : <span style={{ color: T_MUTED }}>—</span> },
+                { key: "actions",     label: "Actions",     render: (r) => <RowActions onEdit={() => { setSkuForm({ sku_id: r.sku_id, description: r.description, uom_id: r.uom_id || "EA", epc_value: r.epc_value || "" }); setSkuFormError(""); }} onDelete={() => setSkuDeleteTarget(r)} /> },
+              ]}
+            />
+          </TableCard>
         </TabsContent>
 
-        {/* ── LOCATIONS TAB ── */}
+        {/* ── LOCATIONS ── */}
         <TabsContent value="locations" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{isEditingLocation ? `Edit Location — ${locationForm.location_id}` : "New Location"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <FormField label="Location Code" required>
-                  <Input value={locationForm.location_code} onChange={(e) => setLocationForm((c) => ({ ...c, location_code: e.target.value }))} placeholder="e.g. A-01-003" disabled={savingLocation} />
-                </FormField>
-                <FormField label="Zone" required>
-                  <Select value={locationForm.zone_id || "none"} onValueChange={(v) => setLocationForm((c) => ({ ...c, zone_id: v === "none" ? "" : v }))} disabled={savingLocation}>
-                    <SelectTrigger><SelectValue placeholder="Select zone" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Select zone</SelectItem>
-                      {zones.map((z) => <SelectItem key={z.zone_id} value={z.zone_id}>{z.zone_name} ({z.zone_id})</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </FormField>
-                <FormField label="Capacity">
-                  <Input type="number" value={locationForm.capacity} onChange={(e) => setLocationForm((c) => ({ ...c, capacity: e.target.value }))} placeholder="100" disabled={savingLocation} />
-                </FormField>
-              </div>
-              {locationFormError && <p className="text-xs text-destructive">{locationFormError}</p>}
-              {locationError && <p className="text-xs text-destructive">{locationError}</p>}
-              <div className="flex gap-2 justify-end pt-1">
-                {isEditingLocation && <Button size="sm" variant="outline" onClick={() => { setLocationForm({ location_id: "", location_code: "", zone_id: "", capacity: "100" }); setLocationFormError(""); }} disabled={savingLocation}>Cancel Edit</Button>}
-                <Button size="sm" variant="outline" onClick={() => setLocationForm({ location_id: "", location_code: "", zone_id: "", capacity: "100" })} disabled={savingLocation}>Clear</Button>
-                <Button size="sm" onClick={handleSaveLocation} disabled={savingLocation}>{savingLocation ? "Saving..." : isEditingLocation ? "Update Location" : "Add Location"}</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <FormCard title={isEditingLocation ? `Edit Location — ${locationForm.location_id}` : "New Location"}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <FormField label="Location Code" required>
+                <Input value={locationForm.location_code} onChange={(e) => setLocationForm((c) => ({ ...c, location_code: e.target.value }))} placeholder="e.g. A-01-003" disabled={savingLocation} />
+              </FormField>
+              <FormField label="Zone" required>
+                <Select value={locationForm.zone_id || "none"} onValueChange={(v) => setLocationForm((c) => ({ ...c, zone_id: v === "none" ? "" : v }))} disabled={savingLocation}>
+                  <SelectTrigger><SelectValue placeholder="Select zone" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select zone</SelectItem>
+                    {zones.map((z) => <SelectItem key={z.zone_id} value={z.zone_id}>{z.zone_name} ({z.zone_id})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Capacity">
+                <Input type="number" value={locationForm.capacity} onChange={(e) => setLocationForm((c) => ({ ...c, capacity: e.target.value }))} placeholder="100" disabled={savingLocation} />
+              </FormField>
+            </div>
+            {(locationFormError || locationError) && <p style={{ fontSize: 12, color: "#991b1b", marginTop: 8 }}>{locationFormError || locationError}</p>}
+            <FormFooter isEditing={isEditingLocation} saving={savingLocation}
+              onCancelEdit={() => { setLocationForm({ location_id: "", location_code: "", zone_id: "", capacity: "100" }); setLocationFormError(""); }}
+              onClear={() => setLocationForm({ location_id: "", location_code: "", zone_id: "", capacity: "100" })}
+              onSave={handleSaveLocation} saveLabel="Add Location" editLabel="Update Location" />
+          </FormCard>
 
-          <SectionDivider title="Location List" />
-
-          <div className="flex flex-wrap gap-2 mb-2">
-            <Input className="h-9 min-w-[200px] flex-1" placeholder="Search location code, zone..." value={locationSearch} onChange={(e) => setLocationSearch(e.target.value)} />
-            {locationSearch && <Button variant="outline" className="h-9" onClick={() => setLocationSearch("")}>Clear</Button>}
-            <Button variant="outline" className="h-9" onClick={loadLocations} disabled={locationLoading}>Refresh</Button>
-          </div>
-
-          <SimpleTable loading={locationLoading} rows={locationRows} search={locationSearch} emptyText="No locations found."
-            columns={[
-              { key: "location_id", label: "Location ID", render: (r) => <span className="font-mono text-xs">{r.location_id}</span> },
-              { key: "location_code", label: "Code" },
-              { key: "zone_name", label: "Zone", render: (r) => r.zone_name || r.zone_id },
-              { key: "capacity", label: "Capacity", render: (r) => <span className="text-right">{r.capacity ?? "-"}</span> },
-              { key: "used_qty", label: "Used", render: (r) => r.used_qty ?? "-" },
-              { key: "actions", label: "Actions", render: (r) => <TableActions onEdit={() => { setLocationForm({ location_id: r.location_id, location_code: r.location_code, zone_id: r.zone_id, capacity: String(r.capacity || 100) }); setLocationFormError(""); }} onDelete={() => setLocationDeleteTarget(r)} /> },
-            ]}
-          />
+          <TableCard>
+            <Toolbar search={locationSearch} onSearch={setLocationSearch} onClear={() => setLocationSearch("")} onRefresh={loadLocations} loading={locationLoading} placeholder="Search location code, zone…" />
+            <DataTable loading={locationLoading} rows={locationRows} search={locationSearch} emptyText="No locations found."
+              cols={[
+                { key: "location_id",   label: "Location ID",  render: (r) => <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: T_SECONDARY }}>{r.location_id}</span> },
+                { key: "location_code", label: "Code" },
+                { key: "zone_name",     label: "Zone",         render: (r) => r.zone_name || r.zone_id },
+                { key: "capacity",      label: "Capacity",     right: true },
+                { key: "used_qty",      label: "Used",         right: true, render: (r) => r.used_qty ?? "—" },
+                { key: "actions",       label: "Actions",      render: (r) => <RowActions onEdit={() => { setLocationForm({ location_id: r.location_id, location_code: r.location_code, zone_id: r.zone_id, capacity: String(r.capacity || 100) }); setLocationFormError(""); }} onDelete={() => setLocationDeleteTarget(r)} /> },
+              ]}
+            />
+          </TableCard>
         </TabsContent>
 
-        {/* ── WAREHOUSES TAB ── */}
+        {/* ── WAREHOUSES ── */}
         <TabsContent value="warehouses" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{isEditingWarehouse ? `Edit Warehouse — ${warehouseForm.warehouse_id}` : "New Warehouse"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <FormField label="Warehouse ID" required>
-                  <Input value={warehouseForm.warehouse_id} onChange={(e) => setWarehouseForm((c) => ({ ...c, warehouse_id: e.target.value }))} placeholder="e.g. WH000004" disabled={isEditingWarehouse || savingWarehouse} />
-                </FormField>
-                <FormField label="Warehouse Name" required>
-                  <Input value={warehouseForm.warehouse_name} onChange={(e) => setWarehouseForm((c) => ({ ...c, warehouse_name: e.target.value }))} placeholder="e.g. South Distribution Center" disabled={savingWarehouse} />
-                </FormField>
-                <FormField label="City">
-                  <Input value={warehouseForm.city} onChange={(e) => setWarehouseForm((c) => ({ ...c, city: e.target.value }))} placeholder="e.g. Shah Alam" disabled={savingWarehouse} />
-                </FormField>
-                <FormField label="Country">
-                  <Input value={warehouseForm.country} onChange={(e) => setWarehouseForm((c) => ({ ...c, country: e.target.value }))} placeholder="e.g. MY" disabled={savingWarehouse} />
-                </FormField>
-              </div>
-              {warehouseFormError && <p className="text-xs text-destructive">{warehouseFormError}</p>}
-              <div className="flex gap-2 justify-end pt-1">
-                {isEditingWarehouse && <Button size="sm" variant="outline" onClick={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" }); setIsEditingWarehouse(false); setWarehouseFormError(""); }} disabled={savingWarehouse}>Cancel Edit</Button>}
-                <Button size="sm" variant="outline" onClick={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" }); setWarehouseFormError(""); }} disabled={savingWarehouse}>Clear</Button>
-                <Button size="sm" onClick={handleSaveWarehouse} disabled={savingWarehouse}>{savingWarehouse ? "Saving..." : isEditingWarehouse ? "Update Warehouse" : "Add Warehouse"}</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <FormCard title={isEditingWarehouse ? `Edit Warehouse — ${warehouseForm.warehouse_id}` : "New Warehouse"}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <FormField label="Warehouse ID" required>
+                <Input value={warehouseForm.warehouse_id} onChange={(e) => setWarehouseForm((c) => ({ ...c, warehouse_id: e.target.value }))} placeholder="e.g. WH000004" disabled={isEditingWarehouse || savingWarehouse} />
+              </FormField>
+              <FormField label="Warehouse Name" required>
+                <Input value={warehouseForm.warehouse_name} onChange={(e) => setWarehouseForm((c) => ({ ...c, warehouse_name: e.target.value }))} placeholder="e.g. South Distribution Center" disabled={savingWarehouse} />
+              </FormField>
+              <FormField label="City">
+                <Input value={warehouseForm.city} onChange={(e) => setWarehouseForm((c) => ({ ...c, city: e.target.value }))} placeholder="e.g. Shah Alam" disabled={savingWarehouse} />
+              </FormField>
+              <FormField label="Country">
+                <Input value={warehouseForm.country} onChange={(e) => setWarehouseForm((c) => ({ ...c, country: e.target.value }))} placeholder="e.g. MY" disabled={savingWarehouse} />
+              </FormField>
+            </div>
+            {warehouseFormError && <p style={{ fontSize: 12, color: "#991b1b", marginTop: 8 }}>{warehouseFormError}</p>}
+            <FormFooter isEditing={isEditingWarehouse} saving={savingWarehouse}
+              onCancelEdit={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" }); setIsEditingWarehouse(false); setWarehouseFormError(""); }}
+              onClear={() => { setWarehouseForm({ warehouse_id: "", warehouse_name: "", city: "", country: "" }); setWarehouseFormError(""); }}
+              onSave={handleSaveWarehouse} saveLabel="Add Warehouse" editLabel="Update Warehouse" />
+          </FormCard>
 
-          <SectionDivider title="Warehouse List" />
-
-          <div className="flex flex-wrap gap-2 mb-2">
-            <Input className="h-9 min-w-[200px] flex-1" placeholder="Search warehouse ID, name..." value={warehouseSearch} onChange={(e) => setWarehouseSearch(e.target.value)} />
-            {warehouseSearch && <Button variant="outline" className="h-9" onClick={() => setWarehouseSearch("")}>Clear</Button>}
-            <Button variant="outline" className="h-9" onClick={loadWarehouses} disabled={warehouseLoading}>Refresh</Button>
-          </div>
-
-          <SimpleTable loading={warehouseLoading} rows={warehouseRows} search={warehouseSearch} emptyText="No warehouses found."
-            columns={[
-              { key: "warehouse_id", label: "Warehouse ID", render: (r) => <span className="font-mono text-xs">{r.warehouse_id}</span> },
-              { key: "warehouse_name", label: "Name" },
-              { key: "city", label: "City", render: (r) => r.city || "-" },
-              { key: "country", label: "Country", render: (r) => r.country || "-" },
-              { key: "actions", label: "Actions", render: (r) => <TableActions
-                onEdit={() => { setWarehouseForm({ warehouse_id: r.warehouse_id, warehouse_name: r.warehouse_name, city: r.city || "", country: r.country || "" }); setIsEditingWarehouse(true); setWarehouseFormError(""); }}
-                onDelete={() => setWarehouseDeleteTarget(r)}
-              /> },
-            ]}
-          />
+          <TableCard>
+            <Toolbar search={warehouseSearch} onSearch={setWarehouseSearch} onClear={() => setWarehouseSearch("")} onRefresh={loadWarehouses} loading={warehouseLoading} placeholder="Search warehouse ID, name…" />
+            <DataTable loading={warehouseLoading} rows={warehouseRows} search={warehouseSearch} emptyText="No warehouses found."
+              cols={[
+                { key: "warehouse_id",   label: "Warehouse ID",  render: (r) => <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: T_SECONDARY }}>{r.warehouse_id}</span> },
+                { key: "warehouse_name", label: "Name",          render: (r) => <span style={{ fontWeight: 500 }}>{r.warehouse_name}</span> },
+                { key: "city",           label: "City",          render: (r) => r.city || <span style={{ color: T_MUTED }}>—</span> },
+                { key: "country",        label: "Country",       render: (r) => r.country || <span style={{ color: T_MUTED }}>—</span> },
+                { key: "actions",        label: "Actions",       render: (r) => <RowActions
+                  onEdit={() => { setWarehouseForm({ warehouse_id: r.warehouse_id, warehouse_name: r.warehouse_name, city: r.city || "", country: r.country || "" }); setIsEditingWarehouse(true); setWarehouseFormError(""); }}
+                  onDelete={() => setWarehouseDeleteTarget(r)} /> },
+              ]}
+            />
+          </TableCard>
         </TabsContent>
 
-        {/* ── SUPPLIERS TAB ── */}
+        {/* ── SUPPLIERS ── */}
         <TabsContent value="suppliers" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{isEditingSupplier ? `Edit Supplier — ${supplierForm.supplier_id}` : "New Supplier"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-2">
-                  <FormField label="Supplier Name" required>
-                    <Input value={supplierForm.supplier_name} onChange={(e) => setSupplierForm((c) => ({ ...c, supplier_name: e.target.value }))} placeholder="e.g. ABC Trading Sdn Bhd" disabled={savingSupplier} />
-                  </FormField>
-                </div>
-                <FormField label="Status">
-                  <Select value={supplierForm.is_active ? "active" : "inactive"} onValueChange={(v) => setSupplierForm((c) => ({ ...c, is_active: v === "active" }))} disabled={savingSupplier}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
+          <FormCard title={isEditingSupplier ? `Edit Supplier — ${supplierForm.supplier_id}` : "New Supplier"}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div style={{ gridColumn: "span 2" }}>
+                <FormField label="Supplier Name" required>
+                  <Input value={supplierForm.supplier_name} onChange={(e) => setSupplierForm((c) => ({ ...c, supplier_name: e.target.value }))} placeholder="e.g. ABC Trading Sdn Bhd" disabled={savingSupplier} />
                 </FormField>
-                <FormField label="Contact Person">
-                  <Input value={supplierForm.contact_person} onChange={(e) => setSupplierForm((c) => ({ ...c, contact_person: e.target.value }))} placeholder="e.g. Ahmad Razif" disabled={savingSupplier} />
-                </FormField>
-                <FormField label="Email" required>
-                  <Input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm((c) => ({ ...c, email: e.target.value }))} placeholder="e.g. orders@abctrading.com" disabled={savingSupplier} />
-                </FormField>
-                <FormField label="Phone" required>
-                  <Input value={supplierForm.phone} onChange={(e) => setSupplierForm((c) => ({ ...c, phone: e.target.value }))} placeholder="e.g. +60123456789" disabled={savingSupplier} />
-                </FormField>
-                <div className="md:col-span-3">
-                  <FormField label="Address">
-                    <Input value={supplierForm.address} onChange={(e) => setSupplierForm((c) => ({ ...c, address: e.target.value }))} placeholder="e.g. No. 12, Jalan Industri 3, Shah Alam" disabled={savingSupplier} />
-                  </FormField>
-                </div>
               </div>
-              {supplierFormError && <p className="text-xs text-destructive">{supplierFormError}</p>}
-              {supplierError && <p className="text-xs text-destructive">{supplierError}</p>}
-              <div className="flex gap-2 justify-end pt-1">
-                {isEditingSupplier && <Button size="sm" variant="outline" onClick={() => { setSupplierForm({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true }); setSupplierFormError(""); }} disabled={savingSupplier}>Cancel Edit</Button>}
-                <Button size="sm" variant="outline" onClick={() => setSupplierForm({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true })} disabled={savingSupplier}>Clear</Button>
-                <Button size="sm" onClick={handleSaveSupplier} disabled={savingSupplier}>{savingSupplier ? "Saving..." : isEditingSupplier ? "Update Supplier" : "Add Supplier"}</Button>
+              <FormField label="Status">
+                <Select value={supplierForm.is_active ? "active" : "inactive"} onValueChange={(v) => setSupplierForm((c) => ({ ...c, is_active: v === "active" }))} disabled={savingSupplier}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField label="Contact Person">
+                <Input value={supplierForm.contact_person} onChange={(e) => setSupplierForm((c) => ({ ...c, contact_person: e.target.value }))} placeholder="e.g. Ahmad Razif" disabled={savingSupplier} />
+              </FormField>
+              <FormField label="Email" required>
+                <Input type="email" value={supplierForm.email} onChange={(e) => setSupplierForm((c) => ({ ...c, email: e.target.value }))} placeholder="e.g. orders@abctrading.com" disabled={savingSupplier} />
+              </FormField>
+              <FormField label="Phone" required>
+                <Input value={supplierForm.phone} onChange={(e) => setSupplierForm((c) => ({ ...c, phone: e.target.value }))} placeholder="e.g. +60123456789" disabled={savingSupplier} />
+              </FormField>
+              <div style={{ gridColumn: "span 3" }}>
+                <FormField label="Address">
+                  <Input value={supplierForm.address} onChange={(e) => setSupplierForm((c) => ({ ...c, address: e.target.value }))} placeholder="e.g. No. 12, Jalan Industri 3, Shah Alam" disabled={savingSupplier} />
+                </FormField>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            {(supplierFormError || supplierError) && <p style={{ fontSize: 12, color: "#991b1b", marginTop: 8 }}>{supplierFormError || supplierError}</p>}
+            <FormFooter isEditing={isEditingSupplier} saving={savingSupplier}
+              onCancelEdit={() => { setSupplierForm({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true }); setSupplierFormError(""); }}
+              onClear={() => setSupplierForm({ supplier_id: "", supplier_name: "", contact_person: "", email: "", phone: "", address: "", is_active: true })}
+              onSave={handleSaveSupplier} saveLabel="Add Supplier" editLabel="Update Supplier" />
+          </FormCard>
 
-          <SectionDivider title="Supplier List" />
-
-          <div className="flex flex-wrap gap-2 mb-2">
-            <Input className="h-9 min-w-[200px] flex-1" placeholder="Search supplier name, ID..." value={supplierSearch} onChange={(e) => setSupplierSearch(e.target.value)} />
-            {supplierSearch && <Button variant="outline" className="h-9" onClick={() => setSupplierSearch("")}>Clear</Button>}
-            <Button variant="outline" className="h-9" onClick={loadSuppliers} disabled={supplierLoading}>Refresh</Button>
-          </div>
-
-          <SupplierTable
-            rows={supplierRows}
-            loading={supplierLoading}
-            search={supplierSearch}
-            selectedId={selectedSupplierId}
-            onSelect={setSelectedSupplierId}
-            onEdit={(r) => { setSupplierForm({ supplier_id: r.supplier_id, supplier_name: r.supplier_name, contact_person: r.contact_person || "", email: r.email || "", phone: r.phone || "", address: r.address || "", is_active: r.is_active }); setSupplierFormError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            onDelete={(r) => setSupplierDeleteTarget(r)}
-          />
+          <TableCard>
+            <Toolbar search={supplierSearch} onSearch={setSupplierSearch} onClear={() => setSupplierSearch("")} onRefresh={loadSuppliers} loading={supplierLoading} placeholder="Search supplier name, ID…" />
+            <DataTable loading={supplierLoading} rows={supplierRows} search={supplierSearch} emptyText="No suppliers found."
+              idKey="supplier_id" selectedId={selectedSupplierId} onSelect={setSelectedSupplierId}
+              cols={[
+                { key: "supplier_id",   label: "Supplier ID",   render: (r) => <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: T_SECONDARY }}>{r.supplier_id}</span> },
+                { key: "supplier_name", label: "Supplier Name", render: (r) => <span style={{ fontWeight: 500 }}>{r.supplier_name}</span> },
+                { key: "email",         label: "Email",         render: (r) => r.email || <span style={{ color: T_MUTED }}>—</span> },
+                { key: "phone",         label: "Phone",         render: (r) => r.phone || <span style={{ color: T_MUTED }}>—</span> },
+                { key: "is_active",     label: "Status",        render: (r) => <StatusPill status={r.is_active ? "active" : "inactive"} /> },
+                { key: "actions",       label: "Actions",       render: (r) => <RowActions
+                  onEdit={() => { setSupplierForm({ supplier_id: r.supplier_id, supplier_name: r.supplier_name, contact_person: r.contact_person || "", email: r.email || "", phone: r.phone || "", address: r.address || "", is_active: r.is_active }); setSupplierFormError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  onDelete={() => setSupplierDeleteTarget(r)} /> },
+              ]}
+            />
+            <SupplierDetailPanel supplier={selectedSupplier}
+              onEdit={(r) => { setSupplierForm({ supplier_id: r.supplier_id, supplier_name: r.supplier_name, contact_person: r.contact_person || "", email: r.email || "", phone: r.phone || "", address: r.address || "", is_active: r.is_active }); setSupplierFormError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              onDelete={(r) => setSupplierDeleteTarget(r)} />
+          </TableCard>
         </TabsContent>
 
-        {/* ── CUSTOMERS TAB ── */}
+        {/* ── CUSTOMERS ── */}
         <TabsContent value="customers" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{isEditingCustomer ? `Edit Customer — ${customerForm.customer_id}` : "New Customer"}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <FormField label="Customer Name" required>
-                  <Input value={customerForm.customer_name} onChange={(e) => setCustomerForm((c) => ({ ...c, customer_name: e.target.value }))} placeholder="e.g. RetailMax" disabled={savingCustomer} />
-                </FormField>
-                <FormField label="Email" required>
-                  <Input value={customerForm.contact} onChange={(e) => setCustomerForm((c) => ({ ...c, contact: e.target.value }))} placeholder="e.g. orders@retailmax.com" disabled={savingCustomer} />
-                </FormField>
-                <FormField label="Phone Number" required>
-                  <Input value={customerForm.phone} onChange={(e) => setCustomerForm((c) => ({ ...c, phone: e.target.value }))} placeholder="e.g. +60123456789" disabled={savingCustomer} />
-                </FormField>
-              </div>
-              {customerFormError && <p className="text-xs text-destructive">{customerFormError}</p>}
-              {customerError && <p className="text-xs text-destructive">{customerError}</p>}
-              <div className="flex gap-2 justify-end pt-1">
-                {isEditingCustomer && <Button size="sm" variant="outline" onClick={() => { setCustomerForm({ customer_id: "", customer_name: "", contact: "", phone: "" }); setCustomerFormError(""); }} disabled={savingCustomer}>Cancel Edit</Button>}
-                <Button size="sm" variant="outline" onClick={() => setCustomerForm({ customer_id: "", customer_name: "", contact: "", phone: "" })} disabled={savingCustomer}>Clear</Button>
-                <Button size="sm" onClick={handleSaveCustomer} disabled={savingCustomer}>{savingCustomer ? "Saving..." : isEditingCustomer ? "Update Customer" : "Add Customer"}</Button>
-              </div>
-            </CardContent>
-          </Card>
+          <FormCard title={isEditingCustomer ? `Edit Customer — ${customerForm.customer_id}` : "New Customer"}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <FormField label="Customer Name" required>
+                <Input value={customerForm.customer_name} onChange={(e) => setCustomerForm((c) => ({ ...c, customer_name: e.target.value }))} placeholder="e.g. RetailMax" disabled={savingCustomer} />
+              </FormField>
+              <FormField label="Email" required>
+                <Input value={customerForm.contact} onChange={(e) => setCustomerForm((c) => ({ ...c, contact: e.target.value }))} placeholder="e.g. orders@retailmax.com" disabled={savingCustomer} />
+              </FormField>
+              <FormField label="Phone Number" required>
+                <Input value={customerForm.phone} onChange={(e) => setCustomerForm((c) => ({ ...c, phone: e.target.value }))} placeholder="e.g. +60123456789" disabled={savingCustomer} />
+              </FormField>
+            </div>
+            {(customerFormError || customerError) && <p style={{ fontSize: 12, color: "#991b1b", marginTop: 8 }}>{customerFormError || customerError}</p>}
+            <FormFooter isEditing={isEditingCustomer} saving={savingCustomer}
+              onCancelEdit={() => { setCustomerForm({ customer_id: "", customer_name: "", contact: "", phone: "" }); setCustomerFormError(""); }}
+              onClear={() => setCustomerForm({ customer_id: "", customer_name: "", contact: "", phone: "" })}
+              onSave={handleSaveCustomer} saveLabel="Add Customer" editLabel="Update Customer" />
+          </FormCard>
 
-          <SectionDivider title="Customer List" />
-
-          <div className="flex flex-wrap gap-2 mb-2">
-            <Input className="h-9 min-w-[200px] flex-1" placeholder="Search customer name, email..." value={customerSearch} onChange={(e) => setCustomerSearch(e.target.value)} />
-            {customerSearch && <Button variant="outline" className="h-9" onClick={() => setCustomerSearch("")}>Clear</Button>}
-            <Button variant="outline" className="h-9" onClick={loadCustomers} disabled={customerLoading}>Refresh</Button>
-          </div>
-
-          <CustomerTable
-            rows={customerRows}
-            loading={customerLoading}
-            search={customerSearch}
-            onEdit={(r) => { setCustomerForm({ customer_id: r.customer_id, customer_name: r.customer_name, contact: r.contact || "", phone: r.phone || "" }); setCustomerFormError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-            onDelete={(r) => setCustomerDeleteTarget(r)}
-          />
+          <TableCard>
+            <Toolbar search={customerSearch} onSearch={setCustomerSearch} onClear={() => setCustomerSearch("")} onRefresh={loadCustomers} loading={customerLoading} placeholder="Search customer name, email…" />
+            <DataTable loading={customerLoading} rows={customerRows} search={customerSearch} emptyText="No customers found."
+              cols={[
+                { key: "customer_id",   label: "Customer ID",   render: (r) => <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: T_SECONDARY }}>{r.customer_id}</span> },
+                { key: "customer_name", label: "Name",          render: (r) => <span style={{ fontWeight: 500 }}>{r.customer_name}</span> },
+                { key: "contact",       label: "Email",         render: (r) => r.contact || <span style={{ color: T_MUTED }}>—</span> },
+                { key: "phone",         label: "Phone",         render: (r) => r.phone || <span style={{ color: T_MUTED }}>—</span> },
+                { key: "actions",       label: "Actions",       render: (r) => <RowActions
+                  onEdit={() => { setCustomerForm({ customer_id: r.customer_id, customer_name: r.customer_name, contact: r.contact || "", phone: r.phone || "" }); setCustomerFormError(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                  onDelete={() => setCustomerDeleteTarget(r)} /> },
+              ]}
+            />
+          </TableCard>
         </TabsContent>
       </Tabs>
 
-      {/* Confirm Modals */}
-      <ConfirmModal open={Boolean(supplierDeleteTarget)} onClose={() => setSupplierDeleteTarget(null)} onConfirm={handleDeleteSupplier}
-        title={supplierDeleteTarget ? `Delete ${supplierDeleteTarget.supplier_id}` : "Delete Supplier"}
-        description={supplierDeleteTarget ? `Delete ${supplierDeleteTarget.supplier_name}? This cannot be undone.` : ""}
-        confirmLabel="Confirm" cancelLabel="Back" variant="destructive" />
-      <ConfirmModal open={Boolean(skuDeleteTarget)} onClose={() => setSkuDeleteTarget(null)} onConfirm={handleDeleteSku}
-        title={skuDeleteTarget ? `Delete ${skuDeleteTarget.sku_id}` : "Delete SKU"}
-        description={skuDeleteTarget ? `Delete ${skuDeleteTarget.description}? This cannot be undone.` : ""}
-        confirmLabel="Confirm" cancelLabel="Back" variant="destructive" />
-      <ConfirmModal open={Boolean(locationDeleteTarget)} onClose={() => setLocationDeleteTarget(null)} onConfirm={handleDeleteLocation}
-        title={locationDeleteTarget ? `Delete ${locationDeleteTarget.location_id}` : "Delete Location"}
-        description={locationDeleteTarget ? `Delete location ${locationDeleteTarget.location_code}? This cannot be undone.` : ""}
-        confirmLabel="Confirm" cancelLabel="Back" variant="destructive" />
-      <ConfirmModal open={Boolean(warehouseDeleteTarget)} onClose={() => setWarehouseDeleteTarget(null)} onConfirm={handleDeleteWarehouse}
-        title={warehouseDeleteTarget ? `Delete ${warehouseDeleteTarget.warehouse_id}` : "Delete Warehouse"}
-        description={warehouseDeleteTarget ? `Delete ${warehouseDeleteTarget.warehouse_name}? This cannot be undone.` : ""}
-        confirmLabel="Confirm" cancelLabel="Back" variant="destructive" />
-      <ConfirmModal open={Boolean(customerDeleteTarget)} onClose={() => setCustomerDeleteTarget(null)} onConfirm={handleDeleteCustomer}
-        title={customerDeleteTarget ? `Delete ${customerDeleteTarget.customer_id}` : "Delete Customer"}
-        description={customerDeleteTarget ? `Delete ${customerDeleteTarget.customer_name}? This cannot be undone.` : ""}
-        confirmLabel="Confirm" cancelLabel="Back" variant="destructive" />
+      {/* ── Delete confirmation modals ── */}
+      {[
+        { target: supplierDeleteTarget,  onClose: () => setSupplierDeleteTarget(null),  onConfirm: handleDeleteSupplier,  id: supplierDeleteTarget?.supplier_id,  name: supplierDeleteTarget?.supplier_name },
+        { target: skuDeleteTarget,       onClose: () => setSkuDeleteTarget(null),       onConfirm: handleDeleteSku,       id: skuDeleteTarget?.sku_id,            name: skuDeleteTarget?.description },
+        { target: locationDeleteTarget,  onClose: () => setLocationDeleteTarget(null),  onConfirm: handleDeleteLocation,  id: locationDeleteTarget?.location_id,  name: locationDeleteTarget?.location_code },
+        { target: warehouseDeleteTarget, onClose: () => setWarehouseDeleteTarget(null), onConfirm: handleDeleteWarehouse, id: warehouseDeleteTarget?.warehouse_id, name: warehouseDeleteTarget?.warehouse_name },
+        { target: customerDeleteTarget,  onClose: () => setCustomerDeleteTarget(null),  onConfirm: handleDeleteCustomer,  id: customerDeleteTarget?.customer_id,  name: customerDeleteTarget?.customer_name },
+      ].map((m, i) => (
+        <DeleteModal key={i} open={Boolean(m.target)} onClose={m.onClose} onConfirm={m.onConfirm}
+          title={m.id ? `Delete ${m.id}` : "Confirm Delete"}
+          description={m.name ? `Delete "${m.name}"? This action cannot be undone.` : ""} />
+      ))}
     </AppLayout>
   );
 };
