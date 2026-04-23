@@ -8,12 +8,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
-// Define which roles can see each menu item
-// Empty array = all roles can see
-// roles: [] = all roles, otherwise specify allowed roles
-const ADMIN_ROLES = ["superadmin"]; // Settings: superadmin only
-const MGR_ROLES = ["superadmin", "hqadmin", "warehousemanager"];
-const ALL_ROLES = [];
+const ADMIN_ROLES = ["superadmin"];
+const MGR_ROLES   = ["superadmin", "hqadmin", "warehousemanager"];
+const ALL_ROLES   = [];
 
 const menuSections = [
   {
@@ -32,10 +29,10 @@ const menuSections = [
   {
     header: "Internal Warehouse Operations",
     items: [
-      { label: "Putaway", icon: PackageOpen, path: "/putaway", roles: ALL_ROLES },
-      { label: "Inventory", icon: Warehouse, path: "/inventory", roles: ALL_ROLES },
-      { label: "Picking", icon: ClipboardList, path: "/picking", roles: ALL_ROLES },
-      { label: "Packing", icon: Package, path: "/packing", roles: ALL_ROLES },
+      { label: "Putaway",   icon: PackageOpen,  path: "/putaway",   roles: ALL_ROLES },
+      { label: "Inventory", icon: Warehouse,     path: "/inventory", roles: ALL_ROLES },
+      { label: "Picking",   icon: ClipboardList, path: "/picking",   roles: ALL_ROLES },
+      { label: "Packing",   icon: Package,       path: "/packing",   roles: ALL_ROLES },
     ],
   },
   {
@@ -54,16 +51,16 @@ const menuSections = [
   {
     header: "Master & Configuration Data",
     items: [
-      { label: "Master Data", icon: Database, path: "/master-data", roles: MGR_ROLES },
-      { label: "LOV Maintenance", icon: List, path: "/lov", roles: MGR_ROLES },
+      { label: "Master Data",     icon: Database, path: "/master-data", roles: MGR_ROLES },
+      { label: "LOV Maintenance", icon: List,     path: "/lov",         roles: MGR_ROLES },
     ],
   },
   {
     header: "Security & Administration",
     items: [
-      { label: "Users & Roles", icon: Users, path: "/users", roles: MGR_ROLES },
-      { label: "Audit Log", icon: FileText, path: "/audit", roles: [...MGR_ROLES, "auditor"] },
-      { label: "Settings", icon: Settings, path: "/settings", roles: ADMIN_ROLES },
+      { label: "Users & Roles", icon: Users,    path: "/users",    roles: MGR_ROLES },
+      { label: "Audit Log",     icon: FileText, path: "/audit",    roles: [...MGR_ROLES, "auditor"] },
+      { label: "Settings",      icon: Settings, path: "/settings", roles: ADMIN_ROLES },
     ],
   },
 ];
@@ -86,11 +83,10 @@ const ROLE_COLOURS = {
 
 export const AppSidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const location = useLocation();
+  const location   = useLocation();
   const { currentUser } = useAuth();
-  const userRole = currentUser?.role || "";
+  const userRole   = currentUser?.role || "";
 
-  // Filter sections — only show items the user has access to
   const visibleSections = menuSections.map((section) => ({
     ...section,
     items: section.items.filter((item) =>
@@ -98,100 +94,112 @@ export const AppSidebar = () => {
     ),
   })).filter((section) => section.items.length > 0);
 
-  const roleLabel = ROLE_LABELS[userRole] || userRole;
-  const roleColour = ROLE_COLOURS[userRole] || { bg: "#F1EFE8", color: "#5F5E5A" };
-
   return (
     <aside className={cn(
-      "flex flex-col h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border shrink-0",
+      "flex flex-col h-screen shrink-0",
       "transition-[width] duration-200 ease-in-out",
       collapsed ? "w-16" : "w-56"
-    )}>
+    )}
+      style={{ background: "#0f1623", borderRight: "1px solid rgba(255,255,255,0.06)" }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between h-14 px-3 border-b border-sidebar-border">
+      <div style={{ height: 56, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
         {!collapsed && (
-          <div className="flex items-center gap-3 overflow-hidden">
-            <svg width="32" height="32" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
-              <rect x="8" y="8" width="48" height="48" rx="12" fill="#2563eb" />
-              <circle cx="32" cy="32" r="16" fill="#fff" />
-              <text x="32" y="38" fontSize="18" textAnchor="middle" fill="#2563eb" fontFamily="Arial" fontWeight="bold">W</text>
-            </svg>
-            <span className="text-base font-semibold text-sidebar-primary whitespace-nowrap">WMS</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, overflow: "hidden" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 7, background: "#2563eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff", flexShrink: 0 }}>
+              W
+            </div>
+            <span style={{ fontSize: 15, fontWeight: 600, color: "#fff", whiteSpace: "nowrap" }}>WMS</span>
           </div>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className={cn(
-            "p-1.5 rounded-md transition-all duration-150",
-            "text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground",
-            "active:scale-95",
-            collapsed && "mx-auto"
-          )}
+          style={{
+            padding: 6, borderRadius: 6, border: "none", cursor: "pointer",
+            background: "transparent", color: "rgba(255,255,255,0.35)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            marginLeft: collapsed ? "auto" : 0, marginRight: collapsed ? "auto" : 0,
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#fff"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.35)"; }}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
         </button>
       </div>
 
-
-
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-2 px-2">
+      <nav style={{ flex: 1, overflowY: "auto", padding: "10px 8px" }}
+        className="no-scrollbar"
+      >
         {visibleSections.map((section, idx) => (
-          <div key={section.header} className="mb-2">
+          <div key={section.header} style={{ marginBottom: 2 }}>
+            {/* Section divider */}
+            {idx > 0 && (
+              <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 4px 10px" }} />
+            )}
+            {/* Section header */}
             {!collapsed && (
-              <div className="px-2 py-1 text-xs font-semibold text-sidebar-muted uppercase tracking-wide select-none">
+              <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.28)", textTransform: "uppercase", letterSpacing: "0.08em", padding: "4px 10px 5px", userSelect: "none" }}>
                 {section.header}
               </div>
             )}
-            {collapsed && (
-              <div className="px-2 py-1">
-                <div className="border-t border-sidebar-border opacity-30" />
-              </div>
-            )}
-            <div className="space-y-0.5">
+
+            {/* Items */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
               {section.items.map((item) => {
                 const active = location.pathname.startsWith(item.path);
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
-                    title={item.tooltip || item.label}
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium",
-                      "transition-all duration-150 ease-in-out",
-                      "relative overflow-hidden group",
-                      active
-                        ? "bg-sidebar-accent text-sidebar-primary"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      collapsed && "justify-center px-2"
-                    )}
+                    title={item.tooltip || (collapsed ? item.label : undefined)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: collapsed ? "8px 0" : "7px 10px",
+                      justifyContent: collapsed ? "center" : "flex-start",
+                      borderRadius: 7,
+                      fontSize: 13.5,
+                      fontWeight: active ? 500 : 400,
+                      color: active ? "#ffffff" : "rgba(255,255,255,0.55)",
+                      background: active ? "#2563eb" : "transparent",
+                      textDecoration: "none",
+                      transition: "background 0.15s, color 0.15s",
+                      cursor: "pointer",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = "rgba(255,255,255,0.07)";
+                        e.currentTarget.style.color = "rgba(255,255,255,0.9)";
+                      }
+                      // active: do nothing — stays solid blue
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!active) {
+                        e.currentTarget.style.background = "transparent";
+                        e.currentTarget.style.color = "rgba(255,255,255,0.55)";
+                      }
+                    }}
                   >
-                    {active && (
-                      <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-r bg-sidebar-primary" />
-                    )}
-                    <item.icon className={cn(
-                      "h-4 w-4 shrink-0 transition-transform duration-150",
-                      "group-hover:scale-110",
-                      active && "scale-110"
-                    )} />
+                    <item.icon size={16} style={{ flexShrink: 0, opacity: active ? 1 : 0.8 }} />
                     {!collapsed && (
-                      <span className="truncate">{item.label}</span>
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {item.label}
+                      </span>
                     )}
                   </Link>
                 );
               })}
             </div>
-            {!collapsed && idx < visibleSections.length - 1 && (
-              <div className="my-2 border-t border-sidebar-border opacity-50" />
-            )}
           </div>
         ))}
       </nav>
 
       {/* Footer */}
       {!collapsed && (
-        <div className="px-3 py-3 border-t border-sidebar-border text-xs text-sidebar-muted">
+        <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "rgba(255,255,255,0.22)", flexShrink: 0 }}>
           WMS v1.0 — Mockup
         </div>
       )}
