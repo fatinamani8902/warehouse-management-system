@@ -31,7 +31,7 @@ export const StatusBadge = ({ status, className }) => {
   return (
     <Badge
       variant="outline"
-      className={cn("text-[11px] font-medium border capitalize", style, className)}
+      className={cn("text-xs font-medium leading-4 border capitalize px-2.5 py-[3px]", style, className)}
     >
       {label}
     </Badge>

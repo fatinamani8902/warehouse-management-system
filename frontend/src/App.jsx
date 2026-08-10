@@ -20,6 +20,7 @@ import PackingPage from "./pages/packing/PackingPage";
 import ShippingPage from "./pages/shipping/ShippingPage";
 import ReturnsPage from "./pages/returns/ReturnsPage";
 import MasterDataPage from "./pages/master-data/MasterDataPage";
+import LocationTaxonomyPage from "./pages/master-data/LocationTaxonomyPage";
 import UsersRolesPage from "./pages/users/UsersRolesPage";
 import LOVMaintenancePage from "./pages/lov/LOVMaintenancePage";
 import AuditLogPage from "./pages/audit/AuditLogPage";
@@ -65,6 +66,7 @@ const AppRoutes = () => {
       <Route path="/shipping" element={<ProtectedRoute><ShippingPage /></ProtectedRoute>}/>
       <Route path="/returns" element={<ProtectedRoute><ReturnsPage /></ProtectedRoute>}/>
       <Route path="/master-data" element={<ProtectedRoute><MasterDataPage /></ProtectedRoute>}/>
+      <Route path="/location-taxonomy" element={<ProtectedRoute><LocationTaxonomyPage /></ProtectedRoute>}/>
       <Route path="/users" element={<ProtectedRoute><UsersRolesPage /></ProtectedRoute>}/>
       <Route path="/lov" element={<ProtectedRoute><LOVMaintenancePage /></ProtectedRoute>}/>
       <Route path="/audit" element={<ProtectedRoute><AuditLogPage /></ProtectedRoute>}/>

@@ -48,7 +48,7 @@ const FormControl = React.forwardRef(({ ...props }, ref) => {
 FormControl.displayName = "FormControl";
 const FormDescription = React.forwardRef(({ className, ...props }, ref) => {
     const { formDescriptionId } = useFormField();
-    return <p ref={ref} id={formDescriptionId} className={cn("text-sm text-muted-foreground", className)} {...props}/>;
+    return <p ref={ref} id={formDescriptionId} className={cn("text-xs font-normal leading-4 text-muted-foreground", className)} {...props}/>;
 });
 FormDescription.displayName = "FormDescription";
 const FormMessage = React.forwardRef(({ className, children, ...props }, ref) => {
@@ -57,7 +57,7 @@ const FormMessage = React.forwardRef(({ className, children, ...props }, ref) =>
     if (!body) {
         return null;
     }
-    return (<p ref={ref} id={formMessageId} className={cn("text-sm font-medium text-destructive", className)} {...props}>
+    return (<p ref={ref} id={formMessageId} className={cn("text-xs font-medium leading-4 text-destructive", className)} {...props}>
         {body}
       </p>);
 });

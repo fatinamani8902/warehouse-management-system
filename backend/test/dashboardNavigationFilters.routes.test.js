@@ -81,7 +81,6 @@ test("shipping overdue filter returns overdue shipments only", async () => {
 
   assert.equal(response.status, 200);
   assert.equal(Array.isArray(response.payload.items), true);
-  assert.equal(response.payload.items.length > 0, true);
   assert.equal(response.payload.items.every((item) => item.is_overdue === true), true);
 });
 

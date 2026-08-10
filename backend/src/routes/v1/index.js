@@ -1,36 +1,68 @@
 import express from "express";
 import authRoutes from "./authRoutes.js";
+import masterDataReadRoutes from "./masterDataReadRoutes.js";
+import masterDataWriteRoutes from "./masterDataWriteRoutes.js";
+import masterDataTaxonomyWriteRoutes from "./masterDataTaxonomyWriteRoutes.js";
+import lovReadRoutes from "./lovReadRoutes.js";
+import lovWriteRoutes from "./lovWriteRoutes.js";
+import locationReadRoutes from "./locationReadRoutes.js";
 import masterDataRoutes from "./masterDataRoutes.js";
+import taxonomyRoutes from "./masterData_taxonomy.js";
+import inboundRbacRoutes from "./inboundRbacRoutes.js";
+import grnPostingRoutes from "./grnPostingRoutes.js";
+import putawayInventoryRoutes from "./putawayInventoryRoutes.js";
+import adjustmentRoutes from "./adjustmentRoutes.js";
 import inboundRoutes from "./inboundRoutes.js";
 import putawayRoutes from "./putawayRoutes.js";
 import outboundRoutes from "./outboundRoutes.js";
-import inventoryRoutes from "./inventoryRoutes.js";
+import inventoryReadRoutes from "./inventoryReadRoutes.js";
 import pickingRoutes from "../picking.js";
 import packingRoutes from "../packing.js";
 import shippingRoutes from "../shipping.js";
 import rmaRoutes from "../rma.js";
+import rmaAuditTrailRoutes from "./rmaAuditTrailRoutes.js";
 import traceRoutes from "../trace.js";
 import usersRoutes from "./usersRoutes.js";
 import lovRoutes from "./lovRoutes.js";
 import auditRoutes from "./auditRoutes.js";
+import returnsPostgresRoutes from "../returnsPostgresRoutes.js";
 import returnsRoutes from "../returns.js";
+import locationRoutes from "./locationRoutes.js";
+import cycleCountRoutes from "./cycleCountRoutes.js";
+import dashboardRoutes from "./dashboardRoutes.js";
 
 const router = express.Router();
 
-router.use("/auth", authRoutes);         // prefix /auth
+router.use("/auth", authRoutes);
+router.use("/dashboard", dashboardRoutes);
+router.use("/master", masterDataReadRoutes);
+router.use("/master", masterDataWriteRoutes);
+router.use("/master", masterDataTaxonomyWriteRoutes);
 router.use("/master", masterDataRoutes);
+router.use("/master", taxonomyRoutes);
+router.use("/inbound", inboundRbacRoutes);
+router.use("/inbound", grnPostingRoutes);
 router.use("/inbound", inboundRoutes);
-router.use(putawayRoutes);               // ada prefix /putaway-tasks dalam file
-router.use("/outbound", outboundRoutes); // prefix /outbound
-router.use("/inventory", inventoryRoutes);
+router.use(putawayInventoryRoutes);
+router.use(putawayRoutes);
+router.use("/outbound", outboundRoutes);
+router.use("/inventory", cycleCountRoutes);
+router.use("/inventory", adjustmentRoutes);
+router.use("/inventory", inventoryReadRoutes);
 router.use("/picking", pickingRoutes);
 router.use("/packing", packingRoutes);
 router.use("/shipping", shippingRoutes);
+router.use("/returns", returnsPostgresRoutes);
 router.use("/returns", returnsRoutes);
 router.use("/rma", rmaRoutes);
+router.use("/rmas", rmaAuditTrailRoutes);
 router.use("/trace", traceRoutes);
 router.use("/users", usersRoutes);
+router.use("/lov", lovReadRoutes);
+router.use("/lov", lovWriteRoutes);
 router.use("/lov", lovRoutes);
 router.use("/audit", auditRoutes);
+router.use("/locations", locationReadRoutes);
+router.use("/locations", locationRoutes);
 
 export default router;

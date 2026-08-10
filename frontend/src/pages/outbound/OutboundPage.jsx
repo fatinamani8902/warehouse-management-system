@@ -1,4 +1,5 @@
 import CreateOrder from "./CreateOrder";
+import SkuCombobox from "@/components/shared/SkuCombobox";
 import { useEffect, useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
@@ -7,9 +8,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchOrders, releaseOrder, toSessionContext } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { canCreateOutbound, canReleaseOutbound, canCancelOutbound } from "@/services/rbac";
+import {
+  fetchOrders,
+  releaseOrder,
+  addOrderLine,
+  cancelOrder,
+  toSessionContext,
+} from "@/services/api";
+import { formatDate, formatDateTime } from "@/utils/dateTimeFormatter";
+import { formatQuantity } from "@/utils/formatQuantity";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const ACCENT       = "#3b5bdb";
@@ -23,7 +32,7 @@ const T_MUTED      = "#9ca3af";
 const STATUS_CFG = {
   draft:     { bg: "#f3f4f6", color: "#111827", border: "#d1d5db", dot: "#6b7280",  label: "Draft" },
   released:  { bg: "#dbeafe", color: "#1e3a8a", border: "#93c5fd", dot: "#3b82f6",  label: "Released" },
-  picking:   { bg: "#ffedd5", color: "#7c2d12", border: "#fdba74", dot: "#f97316",  label: "Picking" },
+  picking:   { bg: "#ffedd5", color: "#7c2d12", border: "#fdba74", dot: "#f97316",  label: "Picked" },
   packed:    { bg: "#dcfce7", color: "#14532d", border: "#86efac", dot: "#22c55e",  label: "Packed" },
   shipped:   { bg: "#ede9fe", color: "#3b0764", border: "#c4b5fd", dot: "#8b5cf6",  label: "Shipped" },
   completed: { bg: "#dcfce7", color: "#14532d", border: "#86efac", dot: "#22c55e",  label: "Completed" },
@@ -36,53 +45,35 @@ function StatusPill({ status }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6,
-      fontSize: 13, fontWeight: 500, padding: "4px 12px", borderRadius: 20,
+      fontSize: 12, fontWeight: 500, lineHeight: "16px", padding: "3px 10px", borderRadius: 20,
       background: c.bg, color: c.color, border: `0.5px solid ${c.border}`,
       whiteSpace: "nowrap",
     }}>
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
       {c.label}
     </span>
   );
 }
 
 // ── Button styles ─────────────────────────────────────────────────────────────
-const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", fontFamily: "inherit", border: "none" };
-const btnNeutral = { ...btnBase, height: 34, padding: "0 14px", borderRadius: 7, fontSize: 14, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
-const btnPrimary = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, fontWeight: 500, background: ACCENT, color: "#fff" };
-const btnDanger  = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, fontWeight: 500, background: "#e03131", color: "#fff" };
-const btnOutline = { ...btnBase, height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnPrimary = { ...btnBase, height: 40, padding: "0 16px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: ACCENT, color: "#fff" };
+const btnDanger  = { ...btnBase, height: 40, padding: "0 16px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: "#e03131", color: "#fff" };
+const btnOutline = { ...btnBase, height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const SKU_OPTIONS = [
-  { sku_id: "SKU000001", description: "Industrial Bearing 6205" },
-  { sku_id: "SKU000002", description: "Hydraulic Pump HP-200" },
-  { sku_id: "SKU000003", description: "Lithium Battery Pack LB-12" },
-  { sku_id: "SKU000004", description: "Steel Fastener M10x50" },
-  { sku_id: "SKU000005", description: "Safety Gloves SG-XL" },
-];
-
 const orderFlow = ["draft", "released", "picking", "packed", "shipped", "completed"];
-
-function formatDateTime(value) {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "—";
-  return parsed.toLocaleString("en-GB", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-}
 
 function toStepperSteps(currentStatus) {
   let reachedCurrent = false;
   return orderFlow.map((status) => {
+    const label = status === "picking" ? "picked" : status.replace(/_/g, " ");
     if (status === currentStatus) {
       reachedCurrent = true;
-      return { label: status.replace(/_/g, " "), status: "current" };
+      return { label, status: "current" };
     }
-    if (!reachedCurrent) return { label: status.replace(/_/g, " "), status: "completed" };
-    return { label: status.replace(/_/g, " "), status: "pending" };
+    if (!reachedCurrent) return { label, status: "completed" };
+    return { label, status: "pending" };
   });
 }
 
@@ -90,23 +81,44 @@ function toStepperSteps(currentStatus) {
 function DetailField({ label, value, danger, span }) {
   return (
     <div style={span ? { gridColumn: "1 / -1" } : {}}>
-      <p style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+      <p style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
         {label}
       </p>
-      <p style={{ fontSize: 14, fontWeight: 500, color: danger ? "#991b1b" : T_PRIMARY }}>
-        {value ?? "—"}
+      <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: danger ? "#991b1b" : T_PRIMARY }}>
+        {value ?? "-"}
       </p>
     </div>
   );
 }
 
-const initialFilters = { search: "", status: "" };
+function DetailSection({ title, children }) {
+  return (
+    <div style={{ borderRadius: 8, border: "0.5px solid #e5e7eb", background: "#fafbff", padding: "12px 16px", marginBottom: 16 }}>
+      <p style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function DetailFieldGrid({ title, children }) {
+  return (
+    <DetailSection title={title}>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5" style={{ columnGap: 14, rowGap: 11, alignItems: "start" }}>
+        {children}
+      </div>
+    </DetailSection>
+  );
+}
+
+const initialFilters = { search: "", status: "", dateFrom: "", dateTo: "" };
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function OutboundPage() {
   const auth = useAuth();
   const session = useMemo(() => toSessionContext(auth), [auth]);
-  const userRole = auth.currentUser?.role || "";
+  const userRole = session.role_id || auth.currentUser?.role_id || auth.currentUser?.role || "";
   const canCreate  = canCreateOutbound(userRole);
   const canRelease = canReleaseOutbound(userRole);
   const canCancel  = canCancelOutbound(userRole);
@@ -144,14 +156,18 @@ export default function OutboundPage() {
   const totalPages  = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
   const pagedOrders = useMemo(() => filteredOrders.slice((page - 1) * pageSize, page * pageSize), [filteredOrders, page, pageSize]);
   const selectedOrder = useMemo(() => orders.find((o) => o.order_id === selectedOrderId) || null, [orders, selectedOrderId]);
+  const selectedStatus = String(selectedOrder?.status || "").toLowerCase();
 
   const loadOrders = async () => {
     try {
       setLoading(true); setError("");
-      const response = await fetchOrders(session);
+      const response = await fetchOrders(session, {
+        ...(filters.dateFrom ? { dateFrom: filters.dateFrom } : {}),
+        ...(filters.dateTo ? { dateTo: filters.dateTo } : {}),
+      });
       const items = (response?.data || []).map((order) => ({
         ...order,
-        customer_name: order.customer_name || "N/A",
+        customer_name: order.customer_name || "-",
         created_at: order.createdAt || order.created_at || new Date().toISOString(),
         lines_count: order.lines_count || (order.lines ? order.lines.length : 0),
         lines: order.lines || [],
@@ -166,7 +182,7 @@ export default function OutboundPage() {
     }
   };
 
-  useEffect(() => { loadOrders(); }, [session]);
+  useEffect(() => { loadOrders(); }, [session, filters.dateFrom, filters.dateTo]);
 
   const handleRelease = async (orderId) => {
     const order = orders.find((o) => o.order_id === orderId);
@@ -177,27 +193,39 @@ export default function OutboundPage() {
     } catch (err) { setError(err.message || "Failed to release order"); }
   };
 
-  const confirmCancel = () => {
+  const confirmCancel = async () => {
     if (!cancelReason.trim()) { setCancelError("Cancellation reason is required"); return; }
     if (cancelReason.trim().length < 5) { setCancelError("Reason must be at least 5 characters"); return; }
-    setOrders((prev) => prev.map((o) =>
-      o.order_id === cancelTarget ? { ...o, status: "cancelled", cancellation_reason: cancelReason.trim() } : o
-    ));
-    setCancelTarget(null); setCancelReason("");
+    try {
+      const response = await cancelOrder(session, cancelTarget, cancelReason.trim());
+      const updated = response?.data;
+      setOrders((prev) => prev.map((o) =>
+        o.order_id === cancelTarget ? { ...o, ...(updated || {}), status: "cancelled" } : o
+      ));
+      setCancelTarget(null); setCancelReason("");
+    } catch (err) {
+      setCancelError(err.message || "Failed to cancel order");
+    }
   };
 
-  const confirmAddSku = () => {
-    if (!skuForm.sku_id) { setSkuError("Please select a SKU"); return; }
-    const qty = Number(skuForm.qty);
-    if (!skuForm.qty || isNaN(qty) || qty <= 0) { setSkuError("Please enter a valid quantity"); return; }
-    const newLine = { sku_id: skuForm.sku_id, ordered_qty: qty, picked_qty: 0 };
-    setOrders((prev) => prev.map((order) => {
-      if (order.order_id !== selectedOrderId) return order;
-      const updatedLines = [...(order.lines || []), newLine];
-      return { ...order, lines: updatedLines, lines_count: updatedLines.length };
-    }));
+  const confirmAddSku = async () => {
+  if (!skuForm.sku_id) { setSkuError("Please select a SKU"); return; }
+  const qty = Number(skuForm.qty);
+  if (!skuForm.qty || isNaN(qty) || qty <= 0) { setSkuError("Please enter a valid quantity"); return; }
+
+  try {
+    await addOrderLine(session, selectedOrderId, {
+      sku_id: skuForm.sku_id,
+      ordered_qty: qty,
+    });
+    await loadOrders();
     setShowAddSku(false);
-  };
+    setSkuForm({ sku_id: "", qty: "" });
+    setSkuError("");
+  } catch (err) {
+    setSkuError(err?.response?.data?.message || err.message || "Failed to add line");
+  }
+};
 
   const updateFilter = (key, value) => { setFilters((c) => ({ ...c, [key]: value })); setPage(1); };
 
@@ -207,8 +235,8 @@ export default function OutboundPage() {
       <Breadcrumbs items={[{ label: "Outbound" }]} />
 
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Outbound Orders</h1>
-        <p style={{ fontSize: 13, color: T_SECONDARY }}>Manage and fulfil customer orders</p>
+        <h1 style={{ fontSize: 22, fontWeight: 700, lineHeight: "30px", color: T_PRIMARY, marginBottom: 2 }}>Outbound Orders</h1>
+        <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>Manage and fulfil customer orders</p>
       </div>
 
       {error && (
@@ -227,27 +255,40 @@ export default function OutboundPage() {
               <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
             </svg>
             <input
-              style={{ width: "100%", height: 34, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 14, color: T_PRIMARY, outline: "none", background: "#fff" }}
+              style={{ width: "100%", height: 40, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
               placeholder="Search Order ID, Customer…"
               value={filters.search}
               onChange={(e) => updateFilter("search", e.target.value)}
             />
           </div>
           <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v === "all" ? "" : v)}>
-            <SelectTrigger style={{ height: 34, width: 175, fontSize: 14, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+            <SelectTrigger style={{ height: 40, width: 175, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="draft">Draft</SelectItem>
               <SelectItem value="released">Released</SelectItem>
-              <SelectItem value="picking">Picking</SelectItem>
+              <SelectItem value="picking">Picked</SelectItem>
               <SelectItem value="packed">Packed</SelectItem>
               <SelectItem value="shipped">Shipped</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
+          <input
+            type="date"
+            aria-label="Created from date"
+            style={{ height: 40, width: 150, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+            value={filters.dateFrom}
+            onChange={(e) => updateFilter("dateFrom", e.target.value)}
+          />
+          <input
+            type="date"
+            aria-label="Created to date"
+            style={{ height: 40, width: 150, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+            value={filters.dateTo}
+            onChange={(e) => updateFilter("dateTo", e.target.value)}
+          />
           <div style={{ flex: 1 }} />
           <button style={btnNeutral} onClick={() => { setFilters(initialFilters); setPage(1); }}>Clear</button>
           <button style={{ ...btnNeutral, opacity: loading ? 0.6 : 1 }} onClick={loadOrders} disabled={loading}>Refresh</button>
@@ -259,7 +300,7 @@ export default function OutboundPage() {
           <thead>
             <tr style={{ background: "#fafbff" }}>
               {["Order ID", "Customer", "Created", "Lines", "Status"].map((h) => (
-                <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
+                <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
                   {h}
                 </th>
               ))}
@@ -267,10 +308,10 @@ export default function OutboundPage() {
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>Loading orders…</td></tr>
+              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>Loading orders…</td></tr>
             )}
             {!loading && pagedOrders.length === 0 && (
-              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>No orders found.</td></tr>
+              <tr><td colSpan={5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>No orders found.</td></tr>
             )}
             {!loading && pagedOrders.map((row) => {
               const isSel = selectedOrderId === row.order_id;
@@ -283,17 +324,17 @@ export default function OutboundPage() {
                   onClick={() => setSelectedOrderId((prev) => prev === row.order_id ? "" : row.order_id)}
                 >
                   <td style={{ padding: "14px 16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: T_SECONDARY }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_SECONDARY }}>
                       {row.order_id}
                     </span>
                   </td>
-                  <td style={{ padding: "14px 16px", fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>
-                    {row.customer_name || row.customer || "—"}
+                  <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_PRIMARY }}>
+                    {row.customer_name || row.customer || "-"}
                   </td>
-                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>
+                  <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
                     {formatDateTime(row.created_at || row.createdAt)}
                   </td>
-                  <td style={{ padding: "14px 16px", fontSize: 14, color: T_SECONDARY }}>
+                  <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
                     {row.lines_count || 0}
                   </td>
                   <td style={{ padding: "14px 16px" }}>
@@ -307,7 +348,7 @@ export default function OutboundPage() {
 
         {/* Pagination */}
         <div style={{ padding: "10px 16px", borderTop: "0.5px solid #eef0fc", background: "#fafbff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: T_SECONDARY }}>
+          <span style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
             {filteredOrders.length} result{filteredOrders.length === 1 ? "" : "s"} · Page {page} of {totalPages}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -340,7 +381,7 @@ export default function OutboundPage() {
 
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: T_PRIMARY }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_PRIMARY }}>
                   {selectedOrder.order_id}
                 </span>
                 <StatusPill status={selectedOrder.status} />
@@ -351,24 +392,24 @@ export default function OutboundPage() {
                 <WorkflowStepper steps={toStepperSteps(selectedOrder.status)} />
               </div>
 
-              {/* Info grid */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14, marginBottom: 16 }}>
+              <DetailFieldGrid title="Order Information">
                 <DetailField label="Customer" value={selectedOrder.customer_name} />
+                <DetailField label="Required Ship By" value={formatDate(selectedOrder.required_ship_by || selectedOrder.ship_by)} />
                 <DetailField label="Created"  value={formatDateTime(selectedOrder.created_at || selectedOrder.createdAt)} />
                 <DetailField label="Lines"    value={selectedOrder.lines_count || 0} />
                 {selectedOrder.notes && <DetailField label="Notes" value={selectedOrder.notes} />}
                 {selectedOrder.cancellation_reason && (
                   <DetailField label="Cancellation Reason" value={selectedOrder.cancellation_reason} danger span />
                 )}
-              </div>
+              </DetailFieldGrid>
 
               {/* SKU table */}
               <div style={{ borderRadius: 8, border: "0.5px solid #e5e7eb", overflow: "hidden", marginBottom: 16 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "#f9fafb" }}>
-                      {[["SKU", "left"], ["Ordered Qty", "right"], ["Picked Qty", "right"]].map(([h, align]) => (
-                        <th key={h} style={{ padding: "9px 14px", textAlign: align, fontSize: 12, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: T_LABEL }}>
+                      {[["SKU ID", "left"], ["Product Name", "left"], ["Category", "left"], ["Ordered Qty", "right"], ["Picked Qty", "right"]].map(([h, align]) => (
+                        <th key={h} style={{ padding: "9px 14px", textAlign: align, fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: "0.05em", textTransform: "uppercase", color: T_LABEL }}>
                           {h}
                         </th>
                       ))}
@@ -376,18 +417,18 @@ export default function OutboundPage() {
                   </thead>
                   <tbody>
                     {(selectedOrder.lines || []).length === 0 && (
-                      <tr><td colSpan={3} style={{ padding: "20px 14px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>No line items yet.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: "20px 14px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>No line items yet.</td></tr>
                     )}
                     {(selectedOrder.lines || []).map((line) => (
                       <tr key={`${selectedOrder.order_id}-${line.sku_id}`} style={{ borderTop: "0.5px solid #f0f0f0" }}>
-                        <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, color: T_SECONDARY }}>
-                          {line.sku_id}
+                        <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_SECONDARY }}>{line.sku_id}</td>
+                        <td style={{ padding: "11px 14px", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_PRIMARY }}>{line.sku_name || line.product_name || line.sku_description || line.description || "-"}</td>
+                        <td style={{ padding: "11px 14px" }}><span style={{ fontSize: 11, color: "#6366f1", background: "#eef2ff", padding: "2px 7px", borderRadius: 4, fontWeight: 500 }}>{line.category || "-"}</span></td>
+                        <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13, fontWeight: 500, color: T_PRIMARY }}>
+                          {formatQuantity(line.ordered_qty)}
                         </td>
-                        <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>
-                          {line.ordered_qty}
-                        </td>
-                        <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 14, fontWeight: 500, color: line.picked_qty > 0 ? T_PRIMARY : T_SECONDARY }}>
-                          {line.picked_qty || 0}
+                        <td style={{ padding: "11px 14px", textAlign: "right", fontSize: 13, fontWeight: 500, color: line.picked_qty > 0 ? T_PRIMARY : T_SECONDARY }}>
+                          {formatQuantity(line.picked_qty)}
                         </td>
                       </tr>
                     ))}
@@ -396,7 +437,7 @@ export default function OutboundPage() {
               </div>
 
               {/* Action buttons */}
-              {selectedOrder.status === "draft" && (canRelease || canCancel) && (
+              {selectedStatus === "draft" && (canRelease || canCancel) && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {canRelease && (
                     <button
@@ -434,15 +475,7 @@ export default function OutboundPage() {
           <div className="space-y-3">
             <div className="space-y-1">
               <Label>SKU</Label>
-              <Select value={skuForm.sku_id || "none"} onValueChange={(v) => { setSkuError(""); setSkuForm((p) => ({ ...p, sku_id: v === "none" ? "" : v })); }}>
-                <SelectTrigger><SelectValue placeholder="Select SKU" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select SKU</SelectItem>
-                  {SKU_OPTIONS.map((sku) => (
-                    <SelectItem key={sku.sku_id} value={sku.sku_id}>{sku.sku_id} — {sku.description}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SkuCombobox session={session} value={skuForm.sku_id} onChange={(v) => { setSkuError(""); setSkuForm((p) => ({ ...p, sku_id: v })); }} error={skuError} />
             </div>
             <div className="space-y-1">
               <Label>Quantity</Label>
@@ -451,7 +484,7 @@ export default function OutboundPage() {
                 value={skuForm.qty}
                 onChange={(e) => { setSkuError(""); setSkuForm((p) => ({ ...p, qty: e.target.value })); }}
                 placeholder="Enter quantity"
-                style={{ width: "100%", height: 36, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 14, color: T_PRIMARY, outline: "none" }}
+                style={{ width: "100%", height: 36, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 13, color: T_PRIMARY, outline: "none" }}
               />
             </div>
             {skuError && <p style={{ fontSize: 12, color: "#991b1b" }}>{skuError}</p>}
@@ -468,7 +501,7 @@ export default function OutboundPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Cancel Order</DialogTitle></DialogHeader>
           <div className="space-y-3">
-            <p style={{ fontSize: 13, color: T_SECONDARY }}>
+            <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
               Are you sure you want to cancel order <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{cancelTarget}</strong>? This action cannot be undone.
             </p>
             <div className="space-y-1">
@@ -493,8 +526,9 @@ export default function OutboundPage() {
       {showCreateOrder && (
         <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.45)", zIndex: 50 }}>
           <div style={{ background: "#fff", padding: 24, borderRadius: 12, width: 420, boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}>
-            <h2 style={{ fontSize: 16, fontWeight: 500, color: T_PRIMARY, marginBottom: 16 }}>Create Order</h2>
+            <h2 style={{ fontSize: 15, fontWeight: 500, color: T_PRIMARY, marginBottom: 16 }}>Create Order</h2>
             <CreateOrder
+              session={session}
               onCreated={(order) => {
                 setOrders((prev) => [order, ...prev]);
                 setSelectedOrderId(order.order_id);

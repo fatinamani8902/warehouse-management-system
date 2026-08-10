@@ -1,15 +1,6 @@
 import { Clock3, MapPin, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-function formatDateTime(value) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString("en-GB", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
-  });
-}
+import { formatDateTime } from "@/utils/dateTimeFormatter";
 
 function toActorLabel(event) {
   const actorType = String(event?.actorType || "system").toLowerCase();
@@ -109,7 +100,7 @@ export const TraceEventRow = ({ event, isLatest, onSkuClick, onReferenceClick })
           <MapPin className="h-3 w-3 shrink-0" />
           <span>
             <span className="font-medium text-foreground">{event.process || "Trace"}</span>
-            <span className="mx-1">—</span>
+            <span className="mx-1">-</span>
             <span title={fullLocation}>{shortLocation}</span>
           </span>
         </div>

@@ -1,86 +1,99 @@
 import express from "express";
-import {
-  listPickLists,
-  getPickList,
-  updatePickListStatusBySource,
-} from "../data/store.js";
+import { requireRole } from "../middlewares/auth.js";
+import * as outboundService from "../services/outboundService.js";
 
 const router = express.Router();
+const viewRoles = [
+  "superadmin", "hqadmin", "admin", "manager", "warehousemanager",
+  "storemanager", "storeoperator", "warehouseoperator",
+  "warehouseclerk", "storekeeper", "auditor",
+];
+const assignRoles = ["superadmin", "hqadmin", "manager", "warehousemanager", "storemanager"];
+const operatorRoles = ["storeoperator", "warehouseoperator", "warehouseclerk", "storekeeper"];
 
-// LIST PICK LISTS
-router.get("/pick-lists", (req, res) => {
-  try {
-    const tenantId = req.context?.tenantId || "TNT000001";
-    const warehouseId = req.headers["x-warehouse-id"] || null;
+function asyncRoute(handler) {
+  return (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
+}
 
-    const result = listPickLists({
-      tenantId,
-      warehouseId,
-      page: Number(req.query.page) || 1,
-      pageSize: Number(req.query.pageSize) || 10,
-      search: req.query.search || "",
-      status: req.query.status || "",
-      waveId: req.query.wave_id || "",
-      assignedUser: req.query.assigned_user || "",
-    });
+router.get("/pick-lists", requireRole(viewRoles), asyncRoute(async (req, res) => {
+  const result = await outboundService.listPickingTasks(req.context, req.query);
+  res.json({
+    success: true,
+    data: result.items,
+    items: result.items,
+    total: result.total,
+    page: result.page,
+    pageSize: result.pageSize,
+  });
+}));
 
-    res.json({
-      success: true,
-      data: result.items,
-      total: result.total,
-      page: result.page,
-      pageSize: result.pageSize,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+router.get("/pick-lists/:pickListId", requireRole(viewRoles), asyncRoute(async (req, res) => {
+  const data = await outboundService.getPickingTask(req.context, req.params.pickListId);
+  if (!data) return res.status(404).json({ success: false, message: "Pick list not found" });
+  return res.json({ success: true, data });
+}));
 
-// GET PICK LIST DETAIL
-router.get("/pick-lists/:pickListId", (req, res) => {
-  try {
-    const tenantId = req.context?.tenantId || "TNT000001";
-    const warehouseId = req.headers["x-warehouse-id"] || null;
+router.get("/operators", requireRole(assignRoles), asyncRoute(async (req, res) => {
+  const data = await outboundService.getPickingOperators(req.context);
+  res.json({ success: true, data });
+}));
 
-    const pickList = getPickList(tenantId, req.params.pickListId, warehouseId);
-    if (!pickList) {
-      return res.status(404).json({ success: false, message: "Pick list not found" });
-    }
+router.post("/pick-lists/:pickListId/assign", requireRole(assignRoles), asyncRoute(async (req, res) => {
+  const data = await outboundService.assignPickingTask(
+    req.context,
+    req.params.pickListId,
+    req.body?.assignedToUserId
+  );
+  res.json({ success: true, message: "Pick list assigned", data });
+}));
 
-    res.json({ success: true, data: pickList });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+router.post("/pick-lists/:pickListId/status", requireRole(operatorRoles), asyncRoute(async (req, res) => {
+  const data = await outboundService.updatePickingStatus(req.context, req.params.pickListId, req.body?.status);
+  res.json({ success: true, data });
+}));
 
-// UPDATE PICK LIST STATUS
-router.post("/pick-lists/:pickListId/status", (req, res) => {
-  try {
-    const tenantId = req.context?.tenantId || "TNT000001";
-    const warehouseId = req.headers["x-warehouse-id"] || null;
-    const { status, source } = req.body;
+router.post("/pick-lists/:pickListId/lines/:lineId/scan-unit", requireRole(operatorRoles), asyncRoute(async (req, res) => {
+  const current = await outboundService.getPickingTask(req.context, req.params.pickListId);
+  const line = current?.lines?.find((item) => item.line_id === req.params.lineId);
+  if (!line) return res.status(404).json({ success: false, message: "Pick task not found" });
+  const data = await outboundService.updatePickLine(
+    req.context,
+    req.params.pickListId,
+    req.params.lineId,
+    Number(line.qty_picked || 0) + 1
+  );
+  res.json({ success: true, data, scan_count: Number(data.picked_qty), qty_required: Number(data.qty) });
+}));
 
-    if (!status) {
-      return res.status(400).json({ success: false, message: "status is required" });
-    }
+router.post("/pick-lists/:pickListId/lines/:lineId/undo-scan", requireRole(operatorRoles), asyncRoute(async (req, res) => {
+  const current = await outboundService.getPickingTask(req.context, req.params.pickListId);
+  const line = current?.lines?.find((item) => item.line_id === req.params.lineId);
+  if (!line) return res.status(404).json({ success: false, message: "Pick task not found" });
+  const data = await outboundService.updatePickLine(
+    req.context,
+    req.params.pickListId,
+    req.params.lineId,
+    Math.max(0, Number(line.qty_picked || 0) - 1)
+  );
+  res.json({ success: true, data, scan_count: Number(data.picked_qty), qty_required: Number(data.qty) });
+}));
 
-    const result = updatePickListStatusBySource({
-      tenantId,
-      pickListId: req.params.pickListId,
-      status,
-      source: source || "PORTAL",
-      userId: req.user_id || "USR000001",
-      warehouseId,
-    });
+async function manualPick(req, res) {
+  const data = await outboundService.updatePickLine(
+    req.context,
+    req.params.pickListId,
+    req.params.lineId,
+    req.body?.qty_picked
+  );
+  res.json({ success: true, data, line_completed: Number(data.picked_qty) >= Number(data.qty) });
+}
 
-    if (result.error) {
-      return res.status(400).json({ success: false, message: result.error });
-    }
+router.post("/pick-lists/:pickListId/lines/:lineId/manual-pick", requireRole(operatorRoles), asyncRoute(manualPick));
+router.post("/pick-lists/:pickListId/lines/:lineId/confirm", requireRole(operatorRoles), asyncRoute(manualPick));
 
-    res.json({ success: true, data: result.data });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
+router.post("/pick-lists/:pickListId/complete", requireRole(operatorRoles), asyncRoute(async (req, res) => {
+  const data = await outboundService.completePickingTask(req.context, req.params.pickListId);
+  res.json({ success: true, message: "Pick list completed", data });
+}));
 
 export default router;

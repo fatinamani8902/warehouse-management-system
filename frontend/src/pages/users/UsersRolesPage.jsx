@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toSessionContext } from "@/services/api";
 import { roles, permissions, rolePermissions } from "@/data/mockData";
 import { ShieldCheck } from "lucide-react";
+import { formatDateTime } from "@/utils/dateTimeFormatter";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const ACCENT       = "#3b5bdb";
@@ -20,13 +21,13 @@ const T_SECONDARY  = "#374151";
 const T_LABEL      = "#6b7280";
 const T_MUTED      = "#9ca3af";
 
-const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
-const btnNeutral = { ...btnBase, height: 32, padding: "0 12px", borderRadius: 7, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
-const btnPrimary = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: ACCENT, color: "#fff" };
-const btnDanger  = { ...btnBase, height: 32, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, background: "#e03131", color: "#fff" };
-const btnOutline = { ...btnBase, height: 28, padding: "0 10px", borderRadius: 6, fontSize: 12, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 40, padding: "0 12px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnPrimary = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: ACCENT, color: "#fff" };
+const btnDanger  = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: "#e03131", color: "#fff" };
+const btnOutline = { ...btnBase, height: 28, padding: "0 10px", borderRadius: 6, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
 const cardStyle  = { background: "#fff", borderRadius: 12, border: "0.5px solid #e8ebf8", overflow: "hidden", boxShadow: "0 2px 10px rgba(59,91,219,.07)" };
-const thStyle    = { padding: "9px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap", background: "#fafbff" };
+const thStyle    = { padding: "9px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap", background: "#fafbff" };
 const tdStyle    = { padding: "13px 16px", borderBottom: "0.5px solid #f0f0f0" };
 
 // ── Helpers (unchanged) ───────────────────────────────────────────────────────
@@ -50,15 +51,7 @@ function avatarColour(name = "") {
 }
 
 function formatLastLogin(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  const now = new Date();
-  const diffDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return `Today, ${date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
-  return date.toLocaleDateString();
+  return formatDateTime(value);
 }
 
 const ROLE_OPTIONS = [
@@ -167,7 +160,7 @@ function PermissionMatrix({ rolePermissions }) {
               <>
                 <tr key={`section-${section.module}`} style={{ background: "#fafbff", borderTop: "0.5px solid #eef0fc", borderBottom: "0.5px solid #eef0fc" }}>
                   <td colSpan={DISPLAY_ROLES.length + 1} style={{ padding: "6px 16px" }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: T_LABEL }}>{section.module}</span>
+                    <span style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", textTransform: "uppercase", letterSpacing: "0.07em", color: T_LABEL }}>{section.module}</span>
                   </td>
                 </tr>
                 {section.rows.map((row) => (
@@ -175,7 +168,7 @@ function PermissionMatrix({ rolePermissions }) {
                     onMouseEnter={(e) => e.currentTarget.style.background = "#f5f7ff"}
                     onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                   >
-                    <td style={{ padding: "10px 16px", fontSize: 13, color: T_PRIMARY }}>{row.label}</td>
+                    <td style={{ padding: "10px 16px", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_PRIMARY }}>{row.label}</td>
                     {DISPLAY_ROLES.map((r) => {
                       const perms = rolePermissions[r.id] || [];
                       const has = perms.some((p) => p === row.perm || p.startsWith(row.perm.split(".")[0] + "."));
@@ -207,7 +200,7 @@ function DeleteModal({ open, onClose, onConfirm, title, description, confirming 
       <DialogContent>
         <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
         <div className="space-y-3">
-          <p style={{ fontSize: 13, color: T_SECONDARY }}>{description}</p>
+          <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>{description}</p>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 8 }}>
             <button style={btnNeutral} onClick={onClose} disabled={confirming}>Back</button>
             <button style={{ ...btnDanger, opacity: confirming ? 0.6 : 1 }} onClick={onConfirm} disabled={confirming}>
@@ -337,8 +330,8 @@ const UsersRolesPage = () => {
       <Breadcrumbs items={[{ label: "Users & Roles" }]} />
 
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Users & Roles</h1>
-        <p style={{ fontSize: 13, color: T_SECONDARY }}>Manage system users and access permissions</p>
+        <h1 style={{ fontSize: 22, fontWeight: 700, lineHeight: "30px", color: T_PRIMARY, marginBottom: 2 }}>Users & Roles</h1>
+        <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>Manage system users and access permissions</p>
       </div>
 
       {/* Read-only banner */}
@@ -365,14 +358,14 @@ const UsersRolesPage = () => {
                   <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
                 </svg>
                 <input
-                  style={{ width: "100%", height: 32, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+                  style={{ width: "100%", height: 40, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_PRIMARY, outline: "none", background: "#fff" }}
                   placeholder="Search name, email, ID…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger style={{ height: 32, width: 150, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+                <SelectTrigger style={{ height: 40, width: 150, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
                 <SelectContent>
@@ -383,7 +376,7 @@ const UsersRolesPage = () => {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger style={{ height: 32, width: 130, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+                <SelectTrigger style={{ height: 40, width: 130, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -412,10 +405,10 @@ const UsersRolesPage = () => {
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={isAdmin ? 6 : 5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>Loading users…</td></tr>
+                  <tr><td colSpan={isAdmin ? 6 : 5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>Loading users…</td></tr>
                 )}
                 {!loading && filteredUsers.length === 0 && (
-                  <tr><td colSpan={isAdmin ? 6 : 5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>No users found.</td></tr>
+                  <tr><td colSpan={isAdmin ? 6 : 5} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>No users found.</td></tr>
                 )}
                 {!loading && filteredUsers.map((user) => {
                   const av = avatarColour(user.name);
@@ -432,9 +425,9 @@ const UsersRolesPage = () => {
                             {getInitials(user.name)}
                           </div>
                           <div>
-                            <p style={{ fontSize: 13, fontWeight: 500, color: T_PRIMARY, lineHeight: 1.3 }}>{user.name}</p>
+                            <p style={{ fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_PRIMARY }}>{user.name}</p>
                             {user.email && <p style={{ fontSize: 12, color: T_MUTED, lineHeight: 1.3 }}>{user.email}</p>}
-                            <p style={{ fontSize: 11, color: T_MUTED, fontFamily: "var(--font-mono)", lineHeight: 1.3 }}>{user.id}</p>
+                            <p style={{ fontSize: 12, fontWeight: 400, lineHeight: "16px", color: T_MUTED, fontFamily: "var(--font-mono)" }}>{user.id}</p>
                           </div>
                         </div>
                       </td>
@@ -448,14 +441,14 @@ const UsersRolesPage = () => {
                       <td style={tdStyle}>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                           <span style={{ width: 7, height: 7, borderRadius: "50%", background: isActive ? "#22c55e" : "#f87171", flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, color: isActive ? "#15803d" : "#dc2626" }}>{isActive ? "Active" : "Inactive"}</span>
+                          <span style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: isActive ? "#15803d" : "#dc2626" }}>{isActive ? "Active" : "Inactive"}</span>
                         </div>
                       </td>
                       {/* Last Login */}
                       <td style={{ ...tdStyle, fontSize: 12, color: T_MUTED }}>{formatLastLogin(user.lastLogin)}</td>
                       {/* Warehouse */}
                       <td style={{ ...tdStyle, fontSize: 12, color: T_SECONDARY }}>
-                        {user.warehouse_ids?.map((w) => WAREHOUSE_OPTIONS.find((opt) => opt.value === w)?.label || w).join(", ") || "—"}
+                        {user.warehouse_ids?.map((w) => WAREHOUSE_OPTIONS.find((opt) => opt.value === w)?.label || w).join(", ") || "-"}
                       </td>
                       {/* Actions */}
                       {isAdmin && (
@@ -485,7 +478,7 @@ const UsersRolesPage = () => {
 
         {/* ── ROLES & PERMISSIONS TAB ── */}
         <TabsContent value="roles" className="mt-4 space-y-4">
-          <p style={{ fontSize: 13, color: T_SECONDARY }}>
+          <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
             Permission matrix — rows show system functions, columns show roles. Tick means the role has that permission.
           </p>
           <PermissionMatrix rolePermissions={rolePermissions} />
@@ -504,7 +497,7 @@ const UsersRolesPage = () => {
               { label: "Email", field: "email",     type: "email", placeholder: "e.g. ahmad@acme.com",   required: !editingUser },
             ].map(({ label, field, type, placeholder, required }) => (
               <div key={field} className="space-y-1">
-                <label style={{ fontSize: 12, fontWeight: 600, color: T_LABEL }}>
+                <label style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL }}>
                   {label} {required && <span style={{ color: "#e03131" }}>*</span>}
                 </label>
                 <Input type={type} placeholder={placeholder} value={userForm[field]}
@@ -512,7 +505,7 @@ const UsersRolesPage = () => {
               </div>
             ))}
             <div className="space-y-1">
-              <label style={{ fontSize: 12, fontWeight: 600, color: T_LABEL }}>Role <span style={{ color: "#e03131" }}>*</span></label>
+              <label style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL }}>Role <span style={{ color: "#e03131" }}>*</span></label>
               <Select value={userForm.role_id || "none"} onValueChange={(v) => setUserForm((c) => ({ ...c, role_id: v === "none" ? "" : v }))} disabled={saving}>
                 <SelectTrigger><SelectValue placeholder="Select role" /></SelectTrigger>
                 <SelectContent>
@@ -522,7 +515,7 @@ const UsersRolesPage = () => {
               </Select>
             </div>
             <div className="space-y-1">
-              <label style={{ fontSize: 12, fontWeight: 600, color: T_LABEL }}>Warehouse <span style={{ color: "#e03131" }}>*</span></label>
+              <label style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL }}>Warehouse <span style={{ color: "#e03131" }}>*</span></label>
               <Select value={userForm.warehouse_id || "none"} onValueChange={(v) => setUserForm((c) => ({ ...c, warehouse_id: v === "none" ? "" : v }))} disabled={saving}>
                 <SelectTrigger><SelectValue placeholder="Select warehouse" /></SelectTrigger>
                 <SelectContent>
@@ -535,7 +528,7 @@ const UsersRolesPage = () => {
               <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 4 }}>
                 <Checkbox id="is-active" checked={userForm.is_active}
                   onCheckedChange={(v) => setUserForm((c) => ({ ...c, is_active: Boolean(v) }))} disabled={saving} />
-                <Label htmlFor="is-active" style={{ cursor: "pointer", fontSize: 13, color: T_PRIMARY }}>Active</Label>
+                <Label htmlFor="is-active" style={{ cursor: "pointer", fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_PRIMARY }}>Active</Label>
               </div>
             )}
             {formError && <p style={{ fontSize: 12, color: "#991b1b" }}>{formError}</p>}

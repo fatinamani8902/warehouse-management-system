@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { GlossaryRegistry, GlossaryTerm } from "@/components/shared/GlossaryTooltip";
 import { AlertTriangle, Clock3 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { formatQuantity } from "@/utils/formatQuantity";
+import { formatDateTime } from "@/utils/dateTimeFormatter";
+import {
+  canAssignPutawayRole,
+  canCompletePutawayTask,
+  canViewPutawayHistoryRole,
+  normalizePutawayRole,
+  putawayAssignedToLabel,
+} from "./putawayRbac";
 import {
   assignPutawayTask,
   completePutawayTask,
@@ -17,6 +26,7 @@ import {
   fetchPutawayTask,
   fetchPutawayTaskHistory,
   fetchPutawayTasks,
+  lookupLocations,
   markPutawayTaskException,
   recomputePutawayBin,
   toSessionContext,
@@ -30,15 +40,18 @@ const T_SECONDARY  = "#374151";
 const T_LABEL      = "#6b7280";
 const T_MUTED      = "#9ca3af";
 
-const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
-const btnNeutral = { ...btnBase, height: 34, padding: "0 14px", borderRadius: 7, fontSize: 14, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
-const btnPrimary = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, fontWeight: 500, background: ACCENT, color: "#fff" };
-const btnDanger  = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, fontWeight: 500, background: "#e03131", color: "#fff" };
-const btnOutline = { ...btnBase, height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnPrimary = { ...btnBase, height: 40, padding: "0 16px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: ACCENT, color: "#fff" };
+const btnDanger  = { ...btnBase, height: 40, padding: "0 16px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: "#e03131", color: "#fff" };
+const btnOutline = { ...btnBase, height: 30, padding: "0 12px", borderRadius: 6, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnSecondary = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #c7d2fe", background: "#fff", color: ACCENT };
+const btnTertiary = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_SECONDARY };
 
 // ── Status pill ───────────────────────────────────────────────────────────────
 const STATUS_CFG = {
   pending:     { bg: "#f3f4f6", color: "#111827", border: "#d1d5db", dot: "#6b7280",  label: "Pending" },
+  assigned:    { bg: "#dbeafe", color: "#1e40af", border: "#93c5fd", dot: "#3b82f6",  label: "Assigned" },
   in_progress: { bg: "#fef9c3", color: "#713f12", border: "#fde68a", dot: "#eab308",  label: "In Progress" },
   completed:   { bg: "#dcfce7", color: "#14532d", border: "#86efac", dot: "#22c55e",  label: "Completed" },
   exception:   { bg: "#fee2e2", color: "#7f1d1d", border: "#fca5a5", dot: "#ef4444",  label: "Exception" },
@@ -50,17 +63,32 @@ function StatusPill({ status }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 6,
-      fontSize: 13, fontWeight: 500, padding: "4px 12px", borderRadius: 20,
+      fontSize: 12, fontWeight: 500, lineHeight: "16px", padding: "3px 10px", borderRadius: 20,
       background: c.bg, color: c.color, border: `0.5px solid ${c.border}`,
       whiteSpace: "nowrap",
     }}>
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot, flexShrink: 0 }} />
       {c.label}
     </span>
   );
 }
 
 // ── Priority pill ─────────────────────────────────────────────────────────────
+function putawayStatusLabel(status) {
+  const key = normalizeStatus(status);
+  return STATUS_CFG[key]?.label || String(status || "-").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function historyEventLabel(eventType) {
+  const normalized = String(eventType || "").trim().toLowerCase();
+  const labels = {
+    assigned: "Assigned",
+    completed: "Completed",
+    exception: "Exception",
+    recompute_bin: "Recompute Bin",
+  };
+  return labels[normalized] || putawayStatusLabel(normalized);
+}
+
 const PRIORITY_CFG = {
   high:   { bg: "#fee2e2", color: "#7f1d1d", border: "#fca5a5", label: "High" },
   medium: { bg: "#fef9c3", color: "#713f12", border: "#fde68a", label: "Medium" },
@@ -86,21 +114,71 @@ function PriorityPill({ priority }) {
 function DetailField({ label, children, danger }) {
   return (
     <div>
-      <p style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+      <p style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
         {label}
       </p>
-      <p style={{ fontSize: 14, fontWeight: 500, color: danger ? "#991b1b" : T_PRIMARY }}>
-        {children ?? "—"}
+      <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: danger ? "#991b1b" : T_PRIMARY }}>
+        {children ?? "-"}
       </p>
     </div>
   );
 }
 
+function hasValue(value) {
+  return value !== null && value !== undefined && String(value).trim() !== "";
+}
+
+function LocationCode({ value }) {
+  const text = hasValue(value) ? String(value) : "-";
+  return (
+    <span
+      title={hasValue(value) ? text : undefined}
+      style={{
+        display: "block",
+        minWidth: 0,
+        maxWidth: "100%",
+        fontFamily: "var(--font-mono)",
+        fontSize: 13,
+        fontWeight: 400,
+        lineHeight: "20px",
+        color: T_SECONDARY,
+        whiteSpace: "normal",
+        overflowWrap: "anywhere",
+        wordBreak: "break-word",
+      }}
+    >
+      {text}
+    </span>
+  );
+}
+
+function SkuDisplay({ task }) {
+  const skuName = task?.sku_name || task?.sku_description;
+  return (
+    <span style={{ display: "block", minWidth: 0 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_SECONDARY }}>
+        {task?.sku_id || "-"}
+      </span>
+      {skuName && (
+        <span style={{ display: "block", marginTop: 3, fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_PRIMARY }}>
+          {skuName}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function skuCompletionLabel(task) {
+  const skuCode = task?.sku_id || "-";
+  const productName = task?.product_name || task?.sku_name || task?.sku_description;
+  return productName ? `${skuCode} – ${productName}` : skuCode;
+}
+
 // ── SectionBox ────────────────────────────────────────────────────────────────
 function SectionBox({ title, children }) {
   return (
-    <div style={{ border: "0.5px solid #e8ebf8", borderRadius: 10, padding: "14px 16px" }}>
-      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: T_LABEL, marginBottom: 12 }}>
+    <div style={{ border: "0.5px solid #e8ebf8", borderRadius: 10, padding: "14px 16px", background: "#fff", minHeight: "100%" }}>
+      <p style={{ fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, marginBottom: 12 }}>
         {title}
       </p>
       {children}
@@ -108,35 +186,67 @@ function SectionBox({ title, children }) {
   );
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const initialFilters = { search: "", status: "", priority: "", source: "", suggestedBin: "", grn: "", sku: "" };
-
-const roleAliases = {
-  superadmin: "superadmin", hqadmin: "hqadmin",
-  storemanager: "storemanager", storeoperator: "storeoperator",
-  warehousemanager: "storemanager", storekeeper: "storeoperator",
-  warehouseclerk: "storeoperator",
-};
-
-const putawayStatuses = new Set(["pending", "in_progress", "completed", "exception"]);
-
-function normalizeRole(roleId) {
-  return roleAliases[String(roleId || "storeoperator").toLowerCase()] || "storeoperator";
+function SummaryTile({ label, children }) {
+  return (
+    <div style={{ minWidth: 0, border: "0.5px solid #e8ebf8", borderRadius: 10, background: "#fff", padding: "12px 14px" }}>
+      <p style={{ fontSize: 12, fontWeight: 600, lineHeight: "16px", color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 5 }}>
+        {label}
+      </p>
+      <div style={{ minWidth: 0, fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_PRIMARY }}>
+        {children ?? "-"}
+      </div>
+    </div>
+  );
 }
 
-function formatDt(value) {
-  if (!value) return "—";
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleString("en-GB", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
+// ── Constants ─────────────────────────────────────────────────────────────────
+const initialFilters = { search: "", status: "", priority: "", dateFrom: "", dateTo: "", source: "", suggestedBin: "", grn: "", sku: "" };
+
+const putawayStatuses = new Set(["pending", "assigned", "in_progress", "completed", "exception"]);
+
+function normalizeStatus(status) {
+  return String(status || "").trim().toLowerCase();
+}
+
+function canAssignTaskStatus(status) {
+  return ["pending", "open"].includes(normalizeStatus(status));
+}
+
+function taskApiId(task) {
+  return String(
+    task?.putaway_task_id
+    || task?.putawayTaskId
+    || task?.task_id
+    || task?.taskId
+    || ""
+  ).trim();
+}
+
+function isTaskRow(value) {
+  return Boolean(value && typeof value === "object" && taskApiId(value));
+}
+
+function taskScopedSession(session, task) {
+  return {
+    ...session,
+    warehouse_id: task?.warehouse_id || session.warehouse_id,
+  };
+}
+
+function isPutawayCompleteDebugEnabled() {
+  return typeof window !== "undefined" && window.localStorage?.getItem("wms.debug.putawayComplete") === "1";
+}
+
+function logPutawayCompleteDebug(stage, payload) {
+  if (isPutawayCompleteDebugEnabled()) {
+    console.info(`[WMS Putaway Complete] ${stage}`, payload);
+  }
 }
 
 function payloadToText(payload) {
-  if (!payload || typeof payload !== "object") return "—";
+  if (!payload || typeof payload !== "object") return "-";
   const entries = Object.entries(payload);
-  if (!entries.length) return "—";
+  if (!entries.length) return "-";
   return entries.map(([k, v]) => `${k}: ${String(v)}`).join(" | ");
 }
 
@@ -152,13 +262,12 @@ const PutawayPage = () => {
   const auth      = useAuth();
   const { toast } = useToast();
   const session   = useMemo(() => toSessionContext(auth), [auth]);
-  const roleId    = useMemo(() => normalizeRole(auth.currentUser?.role), [auth.currentUser?.role]);
+  const roleId    = useMemo(() => normalizePutawayRole(session.role_id || auth.currentUser?.role), [auth.currentUser?.role, session.role_id]);
 
-  const canAssign        = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
+  const canAssign        = useMemo(() => canAssignPutawayRole(roleId), [roleId]);
   const canRecompute     = useMemo(() => ["superadmin", "hqadmin"].includes(roleId), [roleId]);
   const canMarkException = useMemo(() => ["superadmin", "hqadmin", "storemanager"].includes(roleId), [roleId]);
-  const canCompleteTask  = useMemo(() => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId), [roleId]);
-  const canViewHistory   = useMemo(() => ["superadmin", "hqadmin", "storemanager", "storeoperator"].includes(roleId), [roleId]);
+  const canViewHistory   = useMemo(() => canViewPutawayHistoryRole(roleId), [roleId]);
 
   const [filters, setFilters]               = useState(initialFilters);
   const [page, setPage]                     = useState(1);
@@ -169,6 +278,7 @@ const PutawayPage = () => {
   const [total, setTotal]                   = useState(0);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [selectedTask, setSelectedTask]     = useState(null);
+  const [actionTask, setActionTask]         = useState(null);
   const [operators, setOperators]           = useState([]);
   const [actionKey, setActionKey]           = useState("");
 
@@ -179,8 +289,11 @@ const PutawayPage = () => {
 
   // complete modal
   const [completeOpen, setCompleteOpen]       = useState(false);
-  const [actualBin, setActualBin]             = useState("");
+  const [destinationLocationId, setDestinationLocationId] = useState("");
+  const [storageLocations, setStorageLocations] = useState([]);
+  const [destinationLoading, setDestinationLoading] = useState(false);
   const [completeTouched, setCompleteTouched] = useState(false);
+  const [completeConfirmOpen, setCompleteConfirmOpen] = useState(false);
 
   // exception modal
   const [exceptionOpen, setExceptionOpen]       = useState(false);
@@ -248,26 +361,72 @@ const PutawayPage = () => {
   const updateFilter = (key, value) => { setFilters((c) => ({ ...c, [key]: value })); setPage(1); };
   const resetFilters = () => { setFilters(initialFilters); setPage(1); };
   const refreshData  = async (taskId = selectedTaskId) => { await fetchList(); if (taskId) await fetchDetail(taskId); };
+  const refreshTaskAfterComplete = async (taskId, scopedSession, completedTask) => {
+    if (completedTask) {
+      setSelectedTask(completedTask);
+      setTasks((current) => current.map((row) => (
+        row.task_id === taskId || row.putaway_task_id === taskId
+          ? { ...row, ...completedTask }
+          : row
+      )));
+    }
+    try {
+      const [listResult, detail] = await Promise.all([
+        fetchPutawayTasks(scopedSession, { page, pageSize, ...filters }),
+        fetchPutawayTask(scopedSession, taskId),
+      ]);
+      const rows = Array.isArray(listResult?.items) ? listResult.items : [];
+      setTasks(rows);
+      setTotal(Number(listResult?.total || 0));
+      setSelectedTask(detail || completedTask || null);
+      setSelectedTaskId(taskId);
+    } catch (e) {
+      logPutawayCompleteDebug("post-success refresh failed", {
+        taskId,
+        message: e.message,
+      });
+    }
+  };
 
   // ── Assign ────────────────────────────────────────────────────────────────
-  const openAssignModal = async () => {
-    setAssignUserId(selectedTask?.assigned_to_user_id || "");
+  const openAssignModal = async (taskOrEvent = selectedTask) => {
+    const task = isTaskRow(taskOrEvent) ? taskOrEvent : selectedTask;
+    const id = taskApiId(task);
+    if (!task || !id) {
+      const msg = "Putaway task id is missing. Select the task again before assigning.";
+      setAssignErr(msg);
+      toast({ title: "Assign failed", description: msg, variant: "destructive" });
+      return;
+    }
+    setActionTask(task);
+    setSelectedTaskId(id);
+    setAssignUserId(task.assigned_to_user_id || "");
     setAssignErr("");
     setAssignOpen(true);
     try {
-      const rows = await fetchPutawayOperators(session);
+      const rows = await fetchPutawayOperators(taskScopedSession(session, task));
       setOperators(Array.isArray(rows) ? rows : []);
     } catch (_) { setOperators([]); }
   };
 
   const submitAssign = async () => {
+    const task = actionTask || selectedTask;
     if (!assignUserId) { setAssignErr("Please select an operator"); return; }
+    const id = taskApiId(task);
+    if (!task || !id) {
+      const msg = "Putaway task id is missing. Select the task again before assigning.";
+      setAssignErr(msg);
+      toast({ title: "Assign failed", description: msg, variant: "destructive" });
+      return;
+    }
     try {
       setActionKey("assign"); setError("");
-      const res = await assignPutawayTask(session, selectedTask.task_id, assignUserId);
-      toast({ title: "Task assigned", description: res?.message || `Task ${selectedTask.task_id} assigned` });
+      const scopedSession = taskScopedSession(session, task);
+      const res = await assignPutawayTask(scopedSession, id, assignUserId);
+      toast({ title: "Task assigned", description: res?.message || `Task ${id} assigned` });
       setAssignOpen(false);
-      await refreshData(selectedTask.task_id);
+      setActionTask(null);
+      await refreshData(id);
     } catch (e) {
       const msg = e.message || "Unable to assign task";
       setError(msg);
@@ -291,19 +450,194 @@ const PutawayPage = () => {
   };
 
   // ── Complete ──────────────────────────────────────────────────────────────
-  const openCompleteModal = () => { setActualBin(selectedTask?.suggested_bin || ""); setCompleteTouched(false); setCompleteOpen(true); };
+  const openCompleteModal = async (task = selectedTask) => {
+    logPutawayCompleteDebug("detail/list button clicked", {
+      task_id: task?.task_id,
+      putaway_task_id: task?.putaway_task_id,
+      status: task?.status,
+      assigned_to_user_id: task?.assigned_to_user_id,
+      warehouse_id: task?.warehouse_id,
+      roleId,
+      canComplete: canCompletePutawayTask(roleId, task),
+    });
+    if (!task) {
+      logPutawayCompleteDebug("open modal early return: missing task", {});
+      return;
+    }
+    logPutawayCompleteDebug("open modal", {
+      task_id: task.task_id,
+      putaway_task_id: task.putaway_task_id,
+      status: task.status,
+      assigned_to_user_id: task.assigned_to_user_id,
+      task_warehouse_id: task.warehouse_id,
+      session,
+      roleId,
+    });
+    if (!canCompletePutawayTask(roleId, task)) {
+      logPutawayCompleteDebug("open modal blocked by canCompletePutawayTask", {
+        roleId,
+        status: task.status,
+        assigned_to_user_id: task.assigned_to_user_id,
+      });
+      toast({
+        title: "Complete failed",
+        description: "Putaway task must be assigned before completion.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setActionTask(task);
+    setSelectedTaskId(task.task_id);
+    setDestinationLocationId(task.destination_location_id || "");
+    setStorageLocations([]);
+    setCompleteTouched(false);
+    setCompleteConfirmOpen(false);
+    setCompleteOpen(true);
+    logPutawayCompleteDebug("modal opened", {
+      task_id: task.task_id,
+      destination_location_id: task.destination_location_id || "",
+    });
+    try {
+      setDestinationLoading(true);
+      const rows = await lookupLocations(session, { type: "storage" });
+      const available = rows.filter(
+        (item) => !task.warehouse_id || item.warehouse_id === task.warehouse_id
+      );
+      setStorageLocations(available);
+      logPutawayCompleteDebug("storage locations loaded", {
+        task_id: task.task_id,
+        count: available.length,
+        destination_location_id: task.destination_location_id || "",
+      });
+      if (!task.destination_location_id) {
+        const suggested = available.find(
+          (item) => item.display_name === task.suggested_bin
+            || item.location_code === task.suggested_bin
+        );
+        if (suggested) {
+          logPutawayCompleteDebug("suggested destination selected", {
+            task_id: task.task_id,
+            destination_location_id: suggested.location_id,
+          });
+          setDestinationLocationId(suggested.location_id);
+        } else {
+          logPutawayCompleteDebug("no suggested destination matched", {
+            task_id: task.task_id,
+            suggested_bin: task.suggested_bin,
+          });
+        }
+      }
+    } catch (e) {
+      logPutawayCompleteDebug("modal location load failed", { message: e.message });
+      const msg = e.message || "Unable to load storage locations";
+      setError(msg);
+      toast({ title: "Locations failed", description: msg, variant: "destructive" });
+    } finally {
+      setDestinationLoading(false);
+    }
+  };
+
+  const requestCompleteConfirmation = () => {
+    logPutawayCompleteDebug("continue clicked", {
+      destination_location_id: destinationLocationId,
+      destinationLoading,
+      actionKey,
+      disabled: !destinationLocationId || destinationLoading || actionKey === "complete",
+    });
+    setCompleteTouched(true);
+    if (!destinationLocationId) {
+      logPutawayCompleteDebug("continue early return: missing destination", {});
+      return;
+    }
+    setCompleteConfirmOpen(true);
+    logPutawayCompleteDebug("confirm modal opened", {
+      destination_location_id: destinationLocationId,
+    });
+  };
 
   const submitComplete = async () => {
+    logPutawayCompleteDebug("confirm clicked", {
+      actionTask: actionTask && {
+        task_id: actionTask.task_id,
+        status: actionTask.status,
+        assigned_to_user_id: actionTask.assigned_to_user_id,
+        warehouse_id: actionTask.warehouse_id,
+      },
+      selectedTask: selectedTask && {
+        task_id: selectedTask.task_id,
+        status: selectedTask.status,
+        assigned_to_user_id: selectedTask.assigned_to_user_id,
+        warehouse_id: selectedTask.warehouse_id,
+      },
+      destination_location_id: destinationLocationId,
+      actionKey,
+    });
+    const task = actionTask || selectedTask;
     setCompleteTouched(true);
-    if (!selectedTask || !actualBin.trim()) return;
+    if (!task || !destinationLocationId) {
+      logPutawayCompleteDebug("submit early return: missing task or destination", {
+        hasTask: Boolean(task),
+        destination_location_id: destinationLocationId,
+      });
+      return;
+    }
+    const scopedSession = taskScopedSession(session, task);
+    const apiTaskId = taskApiId(task);
+    const finalApiUrl = `${import.meta.env.VITE_API_URL}/api/v1/putaway-tasks/${apiTaskId}/complete`;
+    const debugPayload = {
+      task_id: task.task_id,
+      putaway_task_id: task.putaway_task_id,
+      apiTaskId,
+      status: task.status,
+      assigned_to_user_id: task.assigned_to_user_id,
+      task_warehouse_id: task.warehouse_id,
+      destination_location_id: destinationLocationId,
+      session_user_id: session.user_id,
+      session_warehouse_id: session.warehouse_id,
+      scoped_user_id: scopedSession.user_id,
+      scoped_warehouse_id: scopedSession.warehouse_id,
+      tenant_id: scopedSession.tenant_id,
+      role_id: scopedSession.role_id,
+      final_api_url: finalApiUrl,
+    };
+    logPutawayCompleteDebug("submit click", debugPayload);
+    if (!canCompletePutawayTask(roleId, task)) {
+      logPutawayCompleteDebug("submit blocked by canCompletePutawayTask", {
+        roleId,
+        status: task.status,
+        assigned_to_user_id: task.assigned_to_user_id,
+      });
+      toast({
+        title: "Complete failed",
+        description: "Putaway task must be assigned before completion.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       setActionKey("complete"); setError("");
-      const res = await completePutawayTask(session, selectedTask.task_id, { actual_bin_code: actualBin.trim() });
-      toast({ title: "Task completed", description: res?.message || `Task ${selectedTask.task_id} completed` });
+      logPutawayCompleteDebug("before API call", debugPayload);
+      const res = await completePutawayTask(scopedSession, apiTaskId, {
+        destination_location_id: destinationLocationId,
+      });
+      logPutawayCompleteDebug("submit success", {
+        task_id: task.task_id,
+        apiTaskId,
+        response: res,
+      });
+      toast({ title: "Task completed", description: res?.message || `Task ${apiTaskId} completed` });
+      setCompleteConfirmOpen(false);
       setCompleteOpen(false);
-      await refreshData(selectedTask.task_id);
+      setActionTask(null);
+      await refreshTaskAfterComplete(apiTaskId, scopedSession, res?.task);
     } catch (e) {
       const msg = e.message || "Unable to complete task";
+      logPutawayCompleteDebug("submit error", {
+        task_id: task.task_id,
+        apiTaskId,
+        message: msg,
+        error: e,
+      });
       setError(msg);
       toast({ title: "Complete failed", description: msg, variant: "destructive" });
     } finally { setActionKey(""); }
@@ -345,16 +679,18 @@ const PutawayPage = () => {
 
   // ── Card style ────────────────────────────────────────────────────────────
   const cardStyle = { background: "#fff", borderRadius: 12, border: "0.5px solid #e8ebf8", overflow: "hidden", boxShadow: "0 2px 10px rgba(59,91,219,.07)" };
+  const modalTask = actionTask || selectedTask;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <GlossaryRegistry>
     <AppLayout>
       <Breadcrumbs items={[{ label: "Putaway" }]} />
 
       {/* Page header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Putaway Tasks</h1>
-        <p style={{ fontSize: 13, color: T_SECONDARY }}>Manage and track warehouse putaway operations</p>
+        <h1 style={{ fontSize: 22, fontWeight: 700, lineHeight: "30px", color: T_PRIMARY, marginBottom: 2 }}>Putaway Tasks</h1>
+        <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>Manage and track warehouse putaway operations</p>
       </div>
 
       {/* Error banner */}
@@ -375,7 +711,7 @@ const PutawayPage = () => {
               <circle cx="11" cy="11" r="8" /><path strokeLinecap="round" d="M21 21l-4.35-4.35" />
             </svg>
             <input
-              style={{ width: "100%", height: 34, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 14, color: T_PRIMARY, outline: "none", background: "#fff" }}
+              style={{ width: "100%", height: 40, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
               placeholder="Search task, GRN, SKU, bin…"
               value={filters.search}
               onChange={(e) => updateFilter("search", e.target.value)}
@@ -383,12 +719,13 @@ const PutawayPage = () => {
           </div>
           {/* Status */}
           <Select value={filters.status || "all"} onValueChange={(v) => updateFilter("status", v === "all" ? "" : v)}>
-            <SelectTrigger style={{ height: 34, width: 160, fontSize: 14, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+            <SelectTrigger style={{ height: 40, width: 160, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
               <SelectValue placeholder="All Statuses" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="assigned">Assigned</SelectItem>
               <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="exception">Exception</SelectItem>
@@ -396,7 +733,7 @@ const PutawayPage = () => {
           </Select>
           {/* Priority */}
           <Select value={filters.priority || "all"} onValueChange={(v) => updateFilter("priority", v === "all" ? "" : v)}>
-            <SelectTrigger style={{ height: 34, width: 150, fontSize: 14, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+            <SelectTrigger style={{ height: 40, width: 150, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
               <SelectValue placeholder="All Priorities" />
             </SelectTrigger>
             <SelectContent>
@@ -406,13 +743,30 @@ const PutawayPage = () => {
               <SelectItem value="low">Low</SelectItem>
             </SelectContent>
           </Select>
+          <input
+            type="date"
+            placeholder="dd/mm/yyyy"
+            value={filters.dateFrom}
+            onChange={(e) => updateFilter("dateFrom", e.target.value)}
+            style={{ height: 40, width: 150, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+            aria-label="From Date"
+          />
+          <input
+            type="date"
+            placeholder="dd/mm/yyyy"
+            value={filters.dateTo}
+            onChange={(e) => updateFilter("dateTo", e.target.value)}
+            style={{ height: 40, width: 150, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 10px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+            aria-label="To Date"
+          />
           <div style={{ flex: 1 }} />
           <button style={btnNeutral} onClick={resetFilters}>Clear</button>
           <button style={{ ...btnNeutral, opacity: loading ? 0.6 : 1 }} onClick={fetchList} disabled={loading || Boolean(actionKey)}>Refresh</button>
         </div>
 
         {/* Table */}
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <div style={{ width: "100%", overflowX: "auto" }}>
+        <table style={{ width: "100%", minWidth: 1120, borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ background: "#fafbff" }}>
               {[
@@ -420,49 +774,90 @@ const PutawayPage = () => {
                 "Suggested Bin", "Priority", "Status",
                 "Assigned To", "Updated", "Actions",
               ].map((h) => (
-                <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
-                  {h}
+                <th key={h} style={{ padding: "10px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap" }}>
+                  {h === "GRN" ? <GlossaryTerm term="GRN" /> : h}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={11} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>Loading…</td></tr>
+              <tr><td colSpan={11} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>Loading…</td></tr>
             )}
             {!loading && tasks.length === 0 && (
-              <tr><td colSpan={11} style={{ padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>No putaway tasks found.</td></tr>
+              <tr><td colSpan={11} style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>No putaway tasks found.</td></tr>
             )}
             {!loading && tasks.map((task) => {
               const isSel = selectedTaskId === task.task_id;
+              const showAssign = canAssign && canAssignTaskStatus(task.status);
+              const showComplete = canCompletePutawayTask(roleId, task);
               return (
                 <tr key={task.task_id}
-                  style={{ cursor: "pointer", background: isSel ? ACCENT_LIGHT : "transparent", borderBottom: "0.5px solid #f0f0f0" }}
+                  tabIndex={0}
+                  aria-selected={isSel}
+                  style={{
+                    cursor: "pointer",
+                    background: isSel ? "#f7f8ff" : "transparent",
+                    borderBottom: "0.5px solid #f0f0f0",
+                    boxShadow: isSel ? `inset 3px 0 0 ${ACCENT}` : "none",
+                    outline: "none",
+                  }}
                   onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#f5f7ff"; }}
                   onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}
+                  onFocus={(e) => { e.currentTarget.style.boxShadow = `inset 3px 0 0 ${ACCENT}, 0 0 0 2px rgba(59,91,219,.12)`; }}
+                  onBlur={(e) => { e.currentTarget.style.boxShadow = isSel ? `inset 3px 0 0 ${ACCENT}` : "none"; }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedTaskId((prev) => prev === task.task_id ? "" : task.task_id);
+                    }
+                  }}
                   onClick={() => setSelectedTaskId((prev) => prev === task.task_id ? "" : task.task_id)}
                 >
                   <td style={{ padding: "14px 16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: T_SECONDARY }}>{task.task_id}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_SECONDARY }}>{task.task_id}</span>
                   </td>
                   <td style={{ padding: "14px 16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: T_SECONDARY }}>{task.grn_id || "—"}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_SECONDARY }}>{task.grn_id || "-"}</span>
                   </td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: T_SECONDARY }}>{task.sku_id}</span>
-                  </td>
-                  <td style={{ padding: "14px 16px", fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>{task.qty}</td>
-                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>{task.source_location || "—"}</td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: T_SECONDARY }}>{task.suggested_bin || "—"}</span>
-                  </td>
+                  <td style={{ padding: "14px 16px", minWidth: 180, maxWidth: 260 }}><SkuDisplay task={task} /></td>
+                  <td style={{ padding: "14px 16px", fontSize: 13, fontWeight: 500, color: T_PRIMARY }}>{formatQuantity(task.qty)}</td>
+                  <td style={{ padding: "14px 16px", minWidth: 150, maxWidth: 220 }}><LocationCode value={task.source_location} /></td>
+                  <td style={{ padding: "14px 16px", minWidth: 150, maxWidth: 220 }}><LocationCode value={task.suggested_bin} /></td>
                   <td style={{ padding: "14px 16px" }}><PriorityPill priority={task.priority} /></td>
                   <td style={{ padding: "14px 16px" }}><StatusPill status={task.status} /></td>
-                  <td style={{ padding: "14px 16px", fontSize: 13, color: task.assigned_to_user_name ? T_PRIMARY : T_MUTED }}>
-                    {task.assigned_to_user_name || "Unassigned"}
+                  <td style={{ padding: "14px 16px", fontSize: 13, color: task.assigned_to_user_id ? T_PRIMARY : T_MUTED }}>
+                    {putawayAssignedToLabel(task)}
                   </td>
-                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>{formatDt(task.updated_at)}</td>
+                  <td style={{ padding: "14px 16px", fontSize: 13, color: T_SECONDARY }}>{formatDateTime(task.updated_at)}</td>
                   <td style={{ padding: "14px 16px" }}>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {showAssign && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openAssignModal(task); }}
+                        style={{ ...btnBase, height: 28, padding: "0 12px", borderRadius: 6, fontSize: 12, fontWeight: 500, background: "#fff", color: T_PRIMARY, border: "0.5px solid #d1d5db", opacity: (Boolean(actionKey) || loading) ? 0.5 : 1 }}
+                        disabled={Boolean(actionKey) || loading}
+                      >
+                        Assign
+                      </button>
+                    )}
+                    {showComplete && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          logPutawayCompleteDebug("table Complete button onClick", {
+                            task_id: task.task_id,
+                            status: task.status,
+                            assigned_to_user_id: task.assigned_to_user_id,
+                          });
+                          openCompleteModal(task);
+                        }}
+                        style={{ ...btnBase, height: 28, padding: "0 12px", borderRadius: 6, fontSize: 12, fontWeight: 500, background: ACCENT, color: "#fff", border: "0.5px solid #2f49b8", opacity: (Boolean(actionKey) || loading) ? 0.5 : 1 }}
+                        disabled={Boolean(actionKey) || loading}
+                      >
+                        Complete
+                      </button>
+                    )}
                     {canViewHistory ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); openHistory(task.task_id); }}
@@ -471,17 +866,19 @@ const PutawayPage = () => {
                       >
                         History
                       </button>
-                    ) : <span style={{ fontSize: 12, color: T_MUTED }}>—</span>}
+                    ) : <span style={{ fontSize: 12, color: T_MUTED }}>-</span>}
+                    </div>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        </div>
 
         {/* Pagination */}
         <div style={{ padding: "10px 16px", borderTop: "0.5px solid #eef0fc", background: "#fafbff", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, color: T_SECONDARY }}>
+          <span style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
             {total} result{total === 1 ? "" : "s"} · Page {page} of {totalPages}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -507,40 +904,58 @@ const PutawayPage = () => {
 
         {/* ── Detail panel ── */}
         {selectedTask && (
-          <div style={{ borderTop: "2px solid #3b5bdb", background: "#fff" }}>
-            <div style={{ padding: "18px 16px 16px" }}>
+          <div style={{ borderTop: "2px solid #3b5bdb", background: "#fbfcff", boxShadow: `inset 3px 0 0 ${ACCENT}` }}>
+            <div style={{ padding: "14px 16px 16px" }}>
 
               {/* Header row */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 10 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: T_PRIMARY }}>{selectedTask.task_id}</span>
-                  <StatusPill status={selectedTask.status} />
-                  <PriorityPill priority={selectedTask.priority} />
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14, flexWrap: "wrap", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 600, lineHeight: "16px", color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>
+                      Putaway ID
+                    </p>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 500, lineHeight: "20px", color: T_PRIMARY }}>{selectedTask.task_id}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <StatusPill status={selectedTask.status} />
+                    <PriorityPill priority={selectedTask.priority} />
+                  </div>
                 </div>
                 {/* Action buttons */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {canAssign && ["pending", "in_progress", "exception"].includes(selectedTask.status) && (
-                    <button style={{ ...btnNeutral, opacity: actionKey === "assign" ? 0.5 : 1 }} disabled={Boolean(actionKey)} onClick={openAssignModal}>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
+                  {canAssign && canAssignTaskStatus(selectedTask.status) && (
+                    <button style={{ ...btnPrimary, opacity: actionKey === "assign" ? 0.5 : 1 }} disabled={Boolean(actionKey)} onClick={() => openAssignModal(selectedTask)}>
                       {selectedTask.assigned_to_user_id ? "Reassign" : "Assign"}
                     </button>
                   )}
-                  {canRecompute && ["pending", "in_progress"].includes(selectedTask.status) && (
-                    <button style={{ ...btnNeutral, opacity: actionKey === "recompute" ? 0.5 : 1 }} disabled={Boolean(actionKey)} onClick={submitRecompute}>
+                  {canRecompute && ["pending", "in_progress"].includes(normalizeStatus(selectedTask.status)) && (
+                    <button style={{ ...btnSecondary, opacity: actionKey === "recompute" ? 0.5 : 1 }} disabled={Boolean(actionKey)} onClick={submitRecompute}>
                       {actionKey === "recompute" ? "Recomputing…" : "Recompute Bin"}
                     </button>
                   )}
-                  {canCompleteTask && selectedTask.status === "in_progress" && (
-                    <button style={{ ...btnPrimary, opacity: actionKey === "complete" ? 0.55 : 1 }} disabled={Boolean(actionKey)} onClick={openCompleteModal}>
+                  {canCompletePutawayTask(roleId, selectedTask) && (
+                    <button
+                      style={{ ...btnPrimary, opacity: actionKey === "complete" ? 0.55 : 1 }}
+                      disabled={Boolean(actionKey)}
+                      onClick={() => {
+                        logPutawayCompleteDebug("detail Complete Task button onClick", {
+                          task_id: selectedTask.task_id,
+                          status: selectedTask.status,
+                          assigned_to_user_id: selectedTask.assigned_to_user_id,
+                        });
+                        openCompleteModal(selectedTask);
+                      }}
+                    >
                       {actionKey === "complete" ? "Completing…" : "Complete Task"}
                     </button>
                   )}
-                  {canMarkException && ["pending", "in_progress"].includes(selectedTask.status) && (
+                  {canMarkException && ["pending", "assigned", "in_progress"].includes(normalizeStatus(selectedTask.status)) && (
                     <button style={{ ...btnDanger, opacity: actionKey === "exception" ? 0.55 : 1 }} disabled={Boolean(actionKey)} onClick={openExceptionModal}>
                       Mark Exception
                     </button>
                   )}
                   {canViewHistory && (
-                    <button style={{ ...btnNeutral, opacity: actionKey === "history" ? 0.5 : 1 }} disabled={Boolean(actionKey)} onClick={() => openHistory(selectedTask.task_id)}>
+                    <button style={{ ...btnTertiary, opacity: actionKey === "history" ? 0.5 : 1 }} disabled={Boolean(actionKey)} onClick={() => openHistory(selectedTask.task_id)}>
                       View History
                     </button>
                   )}
@@ -548,50 +963,59 @@ const PutawayPage = () => {
               </div>
 
               {/* Summary fields */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 14, marginBottom: 16 }}>
-                <DetailField label="SKU">{selectedTask.sku_id}</DetailField>
-                <DetailField label="Quantity">{selectedTask.qty}</DetailField>
-                <DetailField label="Source">{selectedTask.source_location || "—"}</DetailField>
-                <DetailField label="Suggested Bin">
-                  <span style={{ fontFamily: "var(--font-mono)" }}>{selectedTask.suggested_bin || "—"}</span>
-                </DetailField>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginBottom: 12 }}>
+                <SummaryTile label="SKU"><SkuDisplay task={selectedTask} /></SummaryTile>
+                <SummaryTile label="Quantity">{formatQuantity(selectedTask.qty)}</SummaryTile>
+                <SummaryTile label="Source"><LocationCode value={selectedTask.source_location} /></SummaryTile>
+                <SummaryTile label="Suggested Bin"><LocationCode value={selectedTask.suggested_bin} /></SummaryTile>
               </div>
 
               {/* Two-column sections */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12, alignItems: "stretch" }}>
                 <SectionBox title="Task Details & Execution">
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px 14px" }}>
                     <DetailField label="Assigned To">
-                      {selectedTask.execution?.assigned_to || selectedTask.assigned_to_user_name ||
-                        <span style={{ color: T_MUTED, fontWeight: 400 }}>Unassigned</span>}
+                      {putawayAssignedToLabel(selectedTask) === "Unassigned"
+                        ? <span style={{ color: T_MUTED, fontWeight: 400 }}>Unassigned</span>
+                        : putawayAssignedToLabel(selectedTask)}
                     </DetailField>
-                    <DetailField label="Started At">{formatDt(selectedTask.execution?.started_at || selectedTask.started_at)}</DetailField>
-                    <DetailField label="Completed At">{formatDt(selectedTask.execution?.completed_at || selectedTask.completed_at)}</DetailField>
+                    <DetailField label="Completed At">{formatDateTime(selectedTask.execution?.completed_at || selectedTask.completed_at)}</DetailField>
                     <DetailField label="Actual Bin">
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)" }}>
-                        {selectedTask.execution?.actual_bin || selectedTask.actual_bin_code || "—"}
-                        {selectedTaskHasBinMismatch && <AlertTriangle size={13} style={{ color: "#d97706" }} />}
+                      <span style={{ display: "flex", alignItems: "flex-start", gap: 5, minWidth: 0 }}>
+                        <LocationCode value={selectedTask.execution?.actual_bin || selectedTask.actual_bin_code} />
+                        {selectedTaskHasBinMismatch && <AlertTriangle size={16} style={{ color: "#d97706" }} />}
                       </span>
                     </DetailField>
-                    <DetailField label="Device Type">{selectedTask.execution?.device_type || selectedTask.device_type || "—"}</DetailField>
-                    <DetailField label="Last Updated">{formatDt(selectedTask.updated_at)}</DetailField>
+                    {hasValue(selectedTask.execution?.started_at || selectedTask.started_at) && (
+                      <DetailField label="Started At">{formatDateTime(selectedTask.execution?.started_at || selectedTask.started_at)}</DetailField>
+                    )}
+                    {hasValue(selectedTask.execution?.device_type || selectedTask.device_type) && (
+                      <DetailField label="Device Type">{selectedTask.execution?.device_type || selectedTask.device_type}</DetailField>
+                    )}
+                    <DetailField label="Last Updated">{formatDateTime(selectedTask.updated_at)}</DetailField>
                   </div>
                 </SectionBox>
 
                 <SectionBox title="Evidence Summary">
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px 16px" }}>
-                    <DetailField label="Scan Method">{selectedTask.evidence_summary?.scan_method || selectedTask.scan_method || "—"}</DetailField>
-                    <DetailField label="EPC Expected">{selectedTask.evidence_summary?.epc_expected_count ?? selectedTask.epc_expected_count ?? "—"}</DetailField>
-                    <DetailField label="EPC Confirmed">{selectedTask.evidence_summary?.epc_confirmed_count ?? selectedTask.epc_confirmed_count ?? "—"}</DetailField>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "10px 14px" }}>
+                    {hasValue(selectedTask.evidence_summary?.scan_method || selectedTask.scan_method) && (
+                      <DetailField label="Scan Method">{selectedTask.evidence_summary?.scan_method || selectedTask.scan_method}</DetailField>
+                    )}
+                    {hasValue(selectedTask.evidence_summary?.epc_expected_count ?? selectedTask.epc_expected_count) && (
+                      <DetailField label="EPC Expected">{selectedTask.evidence_summary?.epc_expected_count ?? selectedTask.epc_expected_count}</DetailField>
+                    )}
+                    {hasValue(selectedTask.evidence_summary?.epc_confirmed_count ?? selectedTask.epc_confirmed_count) && (
+                      <DetailField label="EPC Confirmed">{selectedTask.evidence_summary?.epc_confirmed_count ?? selectedTask.epc_confirmed_count}</DetailField>
+                    )}
                     <DetailField label="Validation">
                       <span style={{ textTransform: "capitalize" }}>
-                        {selectedTask.evidence_summary?.validation_result || selectedTask.validation_result || "—"}
+                        {selectedTask.evidence_summary?.validation_result || selectedTask.validation_result || "-"}
                       </span>
                     </DetailField>
                     {selectedTask.status === "exception" && (
                       <div style={{ gridColumn: "span 2" }}>
                         <DetailField label="Exception Reason" danger>
-                          {selectedTask.evidence_summary?.exception_reason || selectedTask.exception_reason || "—"}
+                          {selectedTask.evidence_summary?.exception_reason || selectedTask.exception_reason || "-"}
                         </DetailField>
                       </div>
                     )}
@@ -612,7 +1036,7 @@ const PutawayPage = () => {
           </DialogHeader>
           <div className="space-y-3">
             <p style={{ fontSize: 13, color: T_SECONDARY }}>
-              Assign task <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{selectedTask?.task_id}</strong> to a warehouse operator.
+              Assign task <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{modalTask?.task_id}</strong> to a warehouse operator.
             </p>
             <div className="space-y-1.5">
               <Label>Operator</Label>
@@ -628,7 +1052,7 @@ const PutawayPage = () => {
               {assignErr && <p style={{ fontSize: 12, color: "#991b1b" }}>{assignErr}</p>}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 8 }}>
-              <button style={btnNeutral} onClick={() => setAssignOpen(false)} disabled={actionKey === "assign"}>Back</button>
+              <button style={btnNeutral} onClick={() => { setAssignOpen(false); setActionTask(null); }} disabled={actionKey === "assign"}>Back</button>
               <button style={{ ...btnPrimary, opacity: actionKey === "assign" ? 0.6 : 1 }} onClick={submitAssign} disabled={actionKey === "assign"}>
                 {actionKey === "assign" ? "Assigning…" : "Assign Task"}
               </button>
@@ -645,30 +1069,50 @@ const PutawayPage = () => {
           </DialogHeader>
           <div className="space-y-3">
             <p style={{ fontSize: 13, color: T_SECONDARY }}>
-              Confirm the actual bin for task <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{selectedTask?.task_id}</strong>.
+              Confirm the actual bin for task <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{modalTask?.task_id}</strong>.
             </p>
             <div className="space-y-1.5">
-              <Label>Actual Bin <span style={{ color: "#e03131" }}>*</span></Label>
-              <Input
-                value={actualBin}
-                onChange={(e) => setActualBin(e.target.value)}
-                onBlur={() => setCompleteTouched(true)}
-                placeholder={selectedTask?.suggested_bin || "e.g. A-01-001"}
-              />
-              {completeTouched && !actualBin.trim() && (
-                <p style={{ fontSize: 12, color: "#991b1b" }}>Actual bin is required.</p>
-              )}
-              {actualBin.trim() && selectedTask?.suggested_bin && actualBin.trim() !== selectedTask.suggested_bin && (
-                <p style={{ fontSize: 12, color: "#d97706", display: "flex", alignItems: "center", gap: 5 }}>
-                  <AlertTriangle size={13} />
-                  Bin differs from suggested ({selectedTask.suggested_bin}). This will be flagged.
-                </p>
+              <Label>Destination Storage Location <span style={{ color: "#e03131" }}>*</span></Label>
+              <Select
+                value={destinationLocationId || "none"}
+                onValueChange={(value) => {
+                  setCompleteTouched(true);
+                  setDestinationLocationId(value === "none" ? "" : value);
+                }}
+                disabled={destinationLoading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={destinationLoading ? "Loading locations..." : "Select storage location"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select storage location</SelectItem>
+                  {storageLocations.map((item) => (
+                    <SelectItem key={item.location_id} value={item.location_id}>
+                      {item.display_name || item.location_code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {completeTouched && !destinationLocationId && (
+                <p style={{ fontSize: 12, color: "#991b1b" }}>Destination storage location is required.</p>
               )}
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 8 }}>
-              <button style={btnNeutral} onClick={() => setCompleteOpen(false)} disabled={actionKey === "complete"}>Back</button>
-              <button style={{ ...btnPrimary, opacity: (!actualBin.trim() || actionKey === "complete") ? 0.55 : 1 }} onClick={submitComplete} disabled={!actualBin.trim() || actionKey === "complete"}>
-                {actionKey === "complete" ? "Completing…" : "Confirm Complete"}
+              <button style={btnNeutral} onClick={() => { setCompleteOpen(false); setCompleteConfirmOpen(false); setActionTask(null); }} disabled={actionKey === "complete"}>Back</button>
+              <button
+                style={{ ...btnPrimary, opacity: (!destinationLocationId || actionKey === "complete") ? 0.55 : 1 }}
+                onClick={() => {
+                  logPutawayCompleteDebug("Continue button onClick", {
+                    destination_location_id: destinationLocationId,
+                    destinationLoading,
+                    actionKey,
+                    disabled: !destinationLocationId || destinationLoading || actionKey === "complete",
+                  });
+                  requestCompleteConfirmation();
+                }}
+                disabled={!destinationLocationId || destinationLoading || actionKey === "complete"}
+              >
+                Continue
               </button>
             </div>
           </div>
@@ -676,6 +1120,46 @@ const PutawayPage = () => {
       </Dialog>
 
       {/* ── Exception modal ── */}
+      <Dialog open={completeConfirmOpen} onOpenChange={setCompleteConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Putaway Completion</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p style={{ fontSize: 13, color: T_SECONDARY }}>
+              Complete task <strong style={{ color: T_PRIMARY, fontFamily: "var(--font-mono)" }}>{modalTask?.task_id}</strong> and move inventory to the selected storage location?
+            </p>
+            <div style={{ border: "0.5px solid #e8ebf8", borderRadius: 8, padding: "10px 12px", background: "#fafbff" }}>
+              <DetailField label="SKU">{skuCompletionLabel(modalTask)}</DetailField>
+              <div style={{ height: 8 }} />
+              <DetailField label="Quantity">{formatQuantity(modalTask?.qty)}</DetailField>
+              <div style={{ height: 8 }} />
+              <DetailField label="Destination">
+                {storageLocations.find((item) => item.location_id === destinationLocationId)?.display_name
+                  || storageLocations.find((item) => item.location_id === destinationLocationId)?.location_code
+                  || destinationLocationId}
+              </DetailField>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, paddingTop: 8 }}>
+              <button style={btnNeutral} onClick={() => setCompleteConfirmOpen(false)} disabled={actionKey === "complete"}>Back</button>
+              <button
+                style={{ ...btnPrimary, opacity: actionKey === "complete" ? 0.55 : 1 }}
+                onClick={() => {
+                  logPutawayCompleteDebug("Complete Putaway button onClick", {
+                    actionKey,
+                    disabled: actionKey === "complete",
+                  });
+                  submitComplete();
+                }}
+                disabled={actionKey === "complete"}
+              >
+                {actionKey === "complete" ? "Completing..." : "Complete Putaway"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={exceptionOpen} onOpenChange={setExceptionOpen}>
         <DialogContent>
           <DialogHeader>
@@ -720,13 +1204,13 @@ const PutawayPage = () => {
             )}
             {historyRows.map((event) => (
               <div key={event.event_id} style={{ border: "0.5px solid #e8ebf8", borderRadius: 8, padding: "10px 14px" }}>
-                <p style={{ fontSize: 13, fontWeight: 600, textTransform: "capitalize", marginBottom: 4, color: T_PRIMARY }}>
-                  {event.event_type.replace(/_/g, " ")}
+                <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4, color: T_PRIMARY }}>
+                  {historyEventLabel(event.event_type)}
                 </p>
                 <p style={{ fontSize: 12, color: T_SECONDARY, marginBottom: 6 }}>{payloadToText(event.event_payload)}</p>
                 <p style={{ fontSize: 12, color: T_MUTED, display: "flex", alignItems: "center", gap: 5 }}>
                   <Clock3 size={11} />
-                  {formatDt(event.created_at)} · {event.created_by}
+                  {formatDateTime(event.created_at)} · {event.created_by}
                 </p>
               </div>
             ))}
@@ -737,6 +1221,7 @@ const PutawayPage = () => {
         </DialogContent>
       </Dialog>
     </AppLayout>
+    </GlossaryRegistry>
   );
 };
 

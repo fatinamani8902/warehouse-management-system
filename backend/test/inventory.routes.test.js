@@ -1,12 +1,28 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { once } from "node:events";
+import { pool } from "../src/db/client.js";
 import { createApp } from "../src/server.js";
 
 let server;
 let baseUrl = "";
+let originalBalanceQty;
+const adjustmentIds = [];
 
 before(async () => {
+  const balance = await pool.query(
+    `SELECT qty_on_hand
+     FROM public.inventory_balances
+     WHERE tenant_id = 'TNT000001'
+       AND warehouse_id = 'WH000001'
+       AND sku_id = 'SKU000006'
+       AND location_id = 'LOC000002'
+       AND lot_no IS NULL
+       AND serial_no IS NULL`
+  );
+  assert.equal(balance.rowCount, 1, "SKU000006 storage balance is required");
+  originalBalanceQty = balance.rows[0].qty_on_hand;
+
   const app = createApp();
   server = app.listen(0);
   await once(server, "listening");
@@ -15,10 +31,40 @@ before(async () => {
 });
 
 after(async () => {
-  if (!server) {
-    return;
+  if (adjustmentIds.length) {
+    await pool.query(
+      `DELETE FROM public.inventory_transactions
+       WHERE tenant_id = 'TNT000001'
+         AND reference_type = 'adjustment'
+         AND reference_id = ANY($1::text[])`,
+      [adjustmentIds]
+    );
+    await pool.query(
+      `DELETE FROM public.adjustment_lines
+       WHERE tenant_id = 'TNT000001'
+         AND adj_id = ANY($1::text[])`,
+      [adjustmentIds]
+    );
+    await pool.query(
+      `DELETE FROM public.adjustments
+       WHERE tenant_id = 'TNT000001'
+         AND adj_id = ANY($1::text[])`,
+      [adjustmentIds]
+    );
   }
-  await new Promise((resolve) => server.close(resolve));
+  await pool.query(
+    `UPDATE public.inventory_balances
+     SET qty_on_hand = $1, updated_at = now()
+     WHERE tenant_id = 'TNT000001'
+       AND warehouse_id = 'WH000001'
+       AND sku_id = 'SKU000006'
+       AND location_id = 'LOC000002'
+       AND lot_no IS NULL
+       AND serial_no IS NULL`,
+    [originalBalanceQty]
+  );
+  if (server) await new Promise((resolve) => server.close(resolve));
+  await pool.end();
 });
 
 async function apiRequest(path, {
@@ -56,14 +102,14 @@ test("inventory summary is tenant scoped", async () => {
   assert.equal(response.payload.items.some((row) => row.location_id === "LOC100001"), false);
 });
 
-test("storeoperator can create and submit adjustment but cannot approve", async () => {
+test("admin can create and submit adjustment while storeoperator cannot approve", async () => {
   const createResponse = await apiRequest("/api/inventory/adjustments", {
     method: "POST",
-    role: "storeoperator",
-    user: "USR000003",
+    role: "admin",
+    user: "USR000009",
     body: {
-      sku_id: "SKU000001",
-      location_id: "LOC000001",
+      sku_id: "SKU000006",
+      location_id: "LOC000002",
       qty_delta: -4,
       reason_code: "DAMAGED",
     },
@@ -71,11 +117,12 @@ test("storeoperator can create and submit adjustment but cannot approve", async 
 
   assert.equal(createResponse.status, 201);
   const adjId = createResponse.payload.adj_id;
+  adjustmentIds.push(adjId);
 
   const submitResponse = await apiRequest(`/api/inventory/adjustments/${adjId}/submit`, {
     method: "POST",
-    role: "storeoperator",
-    user: "USR000003",
+    role: "admin",
+    user: "USR000009",
   });
   assert.equal(submitResponse.status, 200);
   assert.equal(submitResponse.payload.status, "SUBMITTED");
@@ -83,19 +130,19 @@ test("storeoperator can create and submit adjustment but cannot approve", async 
   const approveBlocked = await apiRequest(`/api/inventory/adjustments/${adjId}/approve`, {
     method: "POST",
     role: "storeoperator",
-    user: "USR000003",
+    user: "USR000015",
     body: { approval_note: "trying approve" },
   });
   assert.equal(approveBlocked.status, 403);
 });
 
-test("superadmin can approve submitted adjustment", async () => {
+test("manager can approve submitted adjustment created by another user", async () => {
   const createResponse = await apiRequest("/api/inventory/adjustments", {
     method: "POST",
-    role: "storeoperator",
-    user: "USR000003",
+    role: "admin",
+    user: "USR000009",
     body: {
-      sku_id: "SKU000002",
+      sku_id: "SKU000006",
       location_id: "LOC000002",
       qty_delta: 2,
       reason_code: "MISCOUNTED",
@@ -103,18 +150,19 @@ test("superadmin can approve submitted adjustment", async () => {
   });
   assert.equal(createResponse.status, 201);
   const adjId = createResponse.payload.adj_id;
+  adjustmentIds.push(adjId);
 
   const submitResponse = await apiRequest(`/api/inventory/adjustments/${adjId}/submit`, {
     method: "POST",
-    role: "storeoperator",
-    user: "USR000003",
+    role: "admin",
+    user: "USR000009",
   });
   assert.equal(submitResponse.status, 200);
 
   const approveResponse = await apiRequest(`/api/inventory/adjustments/${adjId}/approve`, {
     method: "POST",
-    role: "superadmin",
-    user: "USR000001",
+    role: "manager",
+    user: "USR000015",
     body: { approval_note: "Approved for correction" },
   });
 
@@ -122,10 +170,10 @@ test("superadmin can approve submitted adjustment", async () => {
   assert.equal(approveResponse.payload.status, "APPROVED");
 });
 
-test("count plan cancel requires reason", async () => {
+test("count plan cancel requires a meaningful reason", async () => {
   const response = await apiRequest("/api/inventory/count-plans/CC000015/cancel", {
     method: "POST",
-    role: "storemanager",
+    role: "manager",
     user: "USR000002",
     body: { reason: "no" },
   });

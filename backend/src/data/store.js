@@ -1,4 +1,32 @@
-﻿const tenants = ["TNT000001", "TNT000002"];
+﻿import { readFileSync, writeFileSync, existsSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const DB_PATH = join(__dirname, "db.json");
+
+function saveDb() {
+  try {
+    writeFileSync(DB_PATH, JSON.stringify(db, null, 2), "utf8");
+  } catch (err) {
+    console.error("[store] Failed to save db.json:", err.message);
+  }
+}
+
+function loadDb() {
+  try {
+    if (existsSync(DB_PATH)) {
+      const saved = JSON.parse(readFileSync(DB_PATH, "utf8"));
+      Object.assign(db, saved);
+      console.log("[store] db.json loaded successfully");
+    }
+  } catch (err) {
+    console.error("[store] Failed to load db.json:", err.message);
+  }
+}
+
+const tenants = ["TNT000001", "TNT000002"];
 
 const db = {
   users: [
@@ -15,7 +43,7 @@ const db = {
   {
     user_id: "USR000002",
     user_name: "Sarah Manager",
-    email: "sarah@acme.com",   
+    email: "sarah@acme.com",
     role_id: "storemanager",
     tenant_id: "TNT000001",
     warehouse_ids: ["WH000001", "WH000002"],
@@ -35,11 +63,11 @@ const db = {
   {
     user_id: "USR000004",
     user_name: "Lisa Operator",
-    email: "lisa@acme.com",
+    email: "lisa_op@acme.com",
     role_id: "storeoperator",
     tenant_id: "TNT000001",
     warehouse_ids: ["WH000001"],
-    is_active: false,
+    is_active: true,
     lastLogin: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
@@ -51,6 +79,16 @@ const db = {
     warehouse_ids: ["WH000001", "WH000002"],
     is_active: true,
     lastLogin: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    user_id: "USR000006",
+    user_name: "Lisa Auditor",
+    email: "lisa@acme.com",      // ← guna email ni
+    role_id: "auditor",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001"],
+    is_active: true,
+    lastLogin: null,
   },
   {
     user_id: "USR100001",
@@ -110,6 +148,11 @@ warehouses: [
       cancellation_reason: null,
       cancelled_by: null,
       cancelled_at: null,
+      lines: [
+      { line_no: 1, sku_id: "SKU000001", sku_name: "Industrial Bearing 6205",    expected_qty: 500 },
+      { line_no: 2, sku_id: "SKU000004", sku_name: "Steel Fastener M10x50",      expected_qty: 200 },
+      { line_no: 3, sku_id: "SKU000005", sku_name: "Safety Gloves SG-XL",        expected_qty: 100 },
+    ],
     },
     {
       asn_id: "ASN000002",
@@ -127,6 +170,10 @@ warehouses: [
       cancellation_reason: null,
       cancelled_by: null,
       cancelled_at: null,
+      lines: [
+      { line_no: 1, sku_id: "SKU000001", sku_name: "Industrial Bearing 6205",    expected_qty: 500 },
+      { line_no: 2, sku_id: "SKU000004", sku_name: "Steel Fastener M10x50",      expected_qty: 200 },
+    ],
     },
     {
       asn_id: "ASN000003",
@@ -144,6 +191,9 @@ warehouses: [
       cancellation_reason: null,
       cancelled_by: null,
       cancelled_at: null,
+      lines: [
+      { line_no: 1, sku_id: "SKU000003", sku_name: "Lithium Battery Pack LB-12", expected_qty: 30 },
+    ],
     },
   ],
  grns: [
@@ -213,49 +263,52 @@ warehouses: [
 ],
 
   orders: [
-  {
-    order_id: "ORD0001",
-    tenant_id: "TNT000001",
-    customer_name: "RetailMax",
-    notes: "Urgent delivery",
-    status: "draft",
-    lines: [
-      { sku_id: "SKU000001", ordered_qty: 10, picked_qty: 0 },
-      { sku_id: "SKU000002", ordered_qty: 5, picked_qty: 0 },
-    ],
-    lines_count: 2,
-    created_at: "2026-02-09T08:00:00.000Z",
-    created_by: "USR000001",
-    cancellation_reason: null,
-  },
-  {
-    order_id: "ORD0002",
-    tenant_id: "TNT000001",
-    customer_name: "BuildRight Co",
-    notes: "",
-    status: "released",
-    lines: [
-      { sku_id: "SKU000003", ordered_qty: 20, picked_qty: 0 },
-    ],
-    lines_count: 1,
-    created_at: "2026-02-09T09:00:00.000Z",
-    created_by: "USR000001",
-    cancellation_reason: null,
-  },
-  {
-    order_id: "ORD0003",
-    tenant_id: "TNT000001",
-    customer_name: "Northline Stores",
-    notes: "Handle with care",
-    status: "cancelled",
-    lines: [
-      { sku_id: "SKU000004", ordered_qty: 15, picked_qty: 0 },
-    ],
-    lines_count: 1,
-    created_at: "2026-02-08T10:00:00.000Z",
-    created_by: "USR000001",
-    cancellation_reason: "Customer cancelled order",
-  },
+    {
+      order_id: "ORD000001",
+      tenant_id: "TNT000001",
+      customer_name: "RetailMax",
+      notes: "Urgent delivery",
+      status: "released",
+      lines: [
+        { sku_id: "SKU000002", ordered_qty: 5, picked_qty: 5 },
+      ],
+      lines_count: 1,
+      created_at: "2026-02-08T08:00:00.000Z",
+      created_by: "USR000001",
+      updated_at: "2026-02-08T08:00:00.000Z",
+      cancellation_reason: null,
+    },
+    {
+      order_id: "ORD000002",
+      tenant_id: "TNT000001",
+      customer_name: "BuildRight Co",
+      notes: "",
+      status: "released",
+      lines: [
+        { sku_id: "SKU000001", ordered_qty: 50, picked_qty: 30 },
+        { sku_id: "SKU000004", ordered_qty: 20, picked_qty: 0 },
+      ],
+      lines_count: 2,
+      created_at: "2026-02-09T09:00:00.000Z",
+      created_by: "USR000001",
+      updated_at: "2026-02-09T09:00:00.000Z",
+      cancellation_reason: null,
+    },
+    {
+      order_id: "ORD000003",
+      tenant_id: "TNT000001",
+      customer_name: "Northline Stores",
+      notes: "Handle with care",
+      status: "cancelled",
+      lines: [
+        { sku_id: "SKU000004", ordered_qty: 15, picked_qty: 0 },
+      ],
+      lines_count: 1,
+      created_at: "2026-02-09T10:00:00.000Z",
+      updated_at: "2026-02-09T10:00:00.000Z",
+      created_by: "USR000001",
+      cancellation_reason: "Customer cancelled order",
+    },
   ],
 
   skus: [
@@ -359,6 +412,30 @@ warehouses: [
     used_qty: 0
   }
 ],
+  taxonomy_zones: [
+    { zone_id: "ZON000001", zone_code: "A", zone_name: "Zone A - Bulk Storage", zone_type: "storage", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true },
+    { zone_id: "ZON000002", zone_code: "B", zone_name: "Zone B - Pick Area", zone_type: "storage", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true },
+    { zone_id: "ZON000003", zone_code: "Q", zone_name: "Zone Q - Quarantine", zone_type: "quarantine", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true },
+    { zone_id: "ZON100001", zone_code: "A", zone_name: "Zone A - Main Storage", zone_type: "storage", tenant_id: "TNT000002", warehouse_id: "WH000003", is_active: true },
+  ],
+  aisles: [
+    { aisle_id: "AIL000001", aisle_code: "01", aisle_name: "Aisle 01", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "A-01" },
+    { aisle_id: "AIL000002", aisle_code: "02", aisle_name: "Aisle 02", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "A-02" },
+    { aisle_id: "AIL000003", aisle_code: "01", aisle_name: "Aisle 01", zone_id: "ZON000002", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "B-01" },
+    { aisle_id: "AIL100001", aisle_code: "01", aisle_name: "Aisle 01", zone_id: "ZON100001", tenant_id: "TNT000002", warehouse_id: "WH000003", is_active: true, location_code: "A-01" },
+  ],
+  bays: [
+    { bay_id: "BAY000001", bay_code: "001", bay_name: "Bay 001", aisle_id: "AIL000001", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", width_cm: 200, depth_cm: 50, level_height_cm: 50, level_count: 4, max_weight_kg: 500, is_active: true, location_code: "A-01-001" },
+    { bay_id: "BAY000002", bay_code: "002", bay_name: "Bay 002", aisle_id: "AIL000001", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", width_cm: 200, depth_cm: 50, level_height_cm: 50, level_count: 4, max_weight_kg: 500, is_active: true, location_code: "A-01-002" },
+    { bay_id: "BAY000003", bay_code: "001", bay_name: "Bay 001", aisle_id: "AIL000003", zone_id: "ZON000002", tenant_id: "TNT000001", warehouse_id: "WH000001", width_cm: 180, depth_cm: 45, level_height_cm: 40, level_count: 3, max_weight_kg: 300, is_active: true, location_code: "B-01-001" },
+  ],
+  bins: [
+    { bin_id: "BIN000001", bin_code: "B01", shelf_level: 1, bay_id: "BAY000001", aisle_id: "AIL000001", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "A-01-001-L1-B01" },
+    { bin_id: "BIN000002", bin_code: "B02", shelf_level: 1, bay_id: "BAY000001", aisle_id: "AIL000001", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "A-01-001-L1-B02" },
+    { bin_id: "BIN000003", bin_code: "B01", shelf_level: 2, bay_id: "BAY000001", aisle_id: "AIL000001", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "A-01-001-L2-B01" },
+    { bin_id: "BIN000004", bin_code: "B01", shelf_level: 1, bay_id: "BAY000002", aisle_id: "AIL000001", zone_id: "ZON000001", tenant_id: "TNT000001", warehouse_id: "WH000001", is_active: true, location_code: "A-01-002-L1-B01" },
+  ],
+  slots: [],
   inventory_reason_codes: [
     { reason_code: "DAMAGED", reason_name: "Damaged", tenant_id: "TNT000001" },
     { reason_code: "MISCOUNTED", reason_name: "Miscounted", tenant_id: "TNT000001" },
@@ -973,26 +1050,9 @@ warehouses: [
   ],
   pick_lists: [
     {
-      pick_list_id: "PCK000077",
-      wave_id: "WAV000012",
-      tenant_id: "TNT000001",
-      warehouse_id: "WH000001",
-      assigned_to_user_id: "USR000003",
-      assigned_to_user_name: "Mike Operator",
-      status: "picking",
-      created_at: "2026-02-09T11:00:00.000Z",
-      started_at: "2026-02-09T11:05:00.000Z",
-      completed_at: null,
-      updated_at: "2026-02-09T11:20:00.000Z",
-      updated_by: "USR000003",
-      lines: [
-        { line_no: 1, sku_id: "SKU000001", location_id: "LOC000001", qty_required: 50, qty_picked: 30, status: "picking" },
-        { line_no: 2, sku_id: "SKU000004", location_id: "LOC000001", qty_required: 20, qty_picked: 0, status: "pending" },
-      ],
-    },
-    {
-      pick_list_id: "PCK000076",
-      wave_id: "WAV000011",
+      pick_list_id: "PCK000001",
+      wave_id: "WAV000001",
+      order_id: "ORD000001",
       tenant_id: "TNT000001",
       warehouse_id: "WH000001",
       assigned_to_user_id: "USR000003",
@@ -1004,12 +1064,62 @@ warehouses: [
       updated_at: "2026-02-08T14:50:00.000Z",
       updated_by: "USR000003",
       lines: [
-        { line_no: 1, sku_id: "SKU000002", location_id: "LOC000002", qty_required: 5, qty_picked: 5, status: "picked" },
+        {
+          line_id: "PCL000001",
+          line_no: 1,
+          sku_id: "SKU000002",
+          location_id: "LOC000002",
+          qty_required: 5,
+          qty_picked: 5,
+          scan_count: 5,
+          status: "picked",
+          picked_by: "USR000003",
+          picked_at: "2026-02-08T14:50:00.000Z",
+        },
       ],
     },
     {
+      pick_list_id: "PCK000002",
+      wave_id: "WAV000002",
+      order_id: "ORD000002",
+      tenant_id: "TNT000001",
+      warehouse_id: "WH000001",
+      assigned_to_user_id: "USR000003",
+      assigned_to_user_name: "Mike Operator",
+      status: "picking",
+      created_at: "2026-02-09T11:00:00.000Z",
+      started_at: "2026-02-09T11:05:00.000Z",
+      completed_at: null,
+      updated_at: "2026-02-09T11:20:00.000Z",
+      updated_by: "USR000003",
+      lines: [
+        {
+          line_id: "PCL000002",
+          line_no: 1,
+          sku_id: "SKU000001",
+          location_id: "LOC000001",
+          qty_required: 50,
+          qty_picked: 30,
+          scan_count: 30,
+          status: "picking",
+        },
+        {
+          line_id: "PCL000003",
+          line_no: 2,
+          sku_id: "SKU000004",
+          location_id: "LOC000001",
+          qty_required: 20,
+          qty_picked: 0,
+          scan_count: 0,
+          status: "pending",
+        },
+      ],
+    },
+    // Tenant 2 — kekal satu untuk demo multi-tenant
+    {
       pick_list_id: "PCK100001",
       wave_id: "WAV100001",
+      order_id: null,
       tenant_id: "TNT000002",
       warehouse_id: "WH000003",
       assigned_to_user_id: "USR100001",
@@ -1021,19 +1131,29 @@ warehouses: [
       updated_at: "2026-02-08T09:30:00.000Z",
       updated_by: "USR100001",
       lines: [
-        { line_no: 1, sku_id: "SKU900001", location_id: "LOC100001", qty_required: 4, qty_picked: 4, status: "picked" },
+        {
+          line_id: "PCL100001",
+          line_no: 1,
+          sku_id: "SKU900001",
+          location_id: "LOC100001",
+          qty_required: 4,
+          qty_picked: 4,
+          scan_count: 4,
+          status: "picked",
+        },
       ],
     },
   ],
   pack_orders: [
     {
-      pack_id: "PAK000033",
-      pick_list_id: "PCK000076",
+      pack_id: "PAK000001",
+      pick_list_id: "PCK000001",
+      order_id: "ORD000001",
       tenant_id: "TNT000001",
       warehouse_id: "WH000001",
-      carton_id: "CTN000091",
-      packaging_type: "standard_box",
-      weight_kg: 78.5,
+      carton_id: "CTN000001",
+      packaging_type: "standard box",
+      weight_kg: 12.5,
       status: "packed",
       label_generated_at: "2026-02-08T14:55:00.000Z",
       packed_at: "2026-02-08T15:00:00.000Z",
@@ -1041,10 +1161,12 @@ warehouses: [
       created_by: "USR000003",
       updated_at: "2026-02-08T15:00:00.000Z",
       updated_by: "USR000003",
+      last_update_source: "PORTAL",
     },
     {
-      pack_id: "PAK000034",
-      pick_list_id: "PCK000077",
+      pack_id: "PAK000002",
+      pick_list_id: "PCK000002",
+      order_id: "ORD000002",
       tenant_id: "TNT000001",
       warehouse_id: "WH000001",
       carton_id: null,
@@ -1057,14 +1179,17 @@ warehouses: [
       created_by: "USR000002",
       updated_at: "2026-02-09T11:30:00.000Z",
       updated_by: "USR000002",
+      last_update_source: "SYSTEM",
     },
+    // Tenant 2
     {
       pack_id: "PAK100001",
       pick_list_id: "PCK100001",
+      order_id: null,
       tenant_id: "TNT000002",
       warehouse_id: "WH000003",
       carton_id: "CTN100001",
-      packaging_type: "pallet_wrap",
+      packaging_type: "pallet wrap",
       weight_kg: 20.2,
       status: "carton_generated",
       label_generated_at: "2026-02-08T09:45:00.000Z",
@@ -1073,101 +1198,70 @@ warehouses: [
       created_by: "USR100001",
       updated_at: "2026-02-08T09:45:00.000Z",
       updated_by: "USR100001",
-    },
-    // Dalam db.pack_orders array, tambah:
-    {
-      pack_id: "PAK000035",
-      pick_list_id: "PCK000076", // PCK000076 status completed ✅
-      tenant_id: "TNT000001",
-      warehouse_id: "WH000001",
-      carton_id: null,
-      packaging_type: null,
-      weight_kg: null,
-      status: "draft",
-      label_generated_at: null,
-      packed_at: null,
-      created_at: "2026-02-09T13:00:00.000Z",
-      created_by: "USR000002",
-      updated_at: "2026-02-09T13:00:00.000Z",
-      updated_by: "USR000002",
+      last_update_source: "PORTAL",
     },
   ],
   lov_packaging_types: [
-    { value: "standard_box", label: "Standard Box", tenant_id: "TNT000001", is_active: true },
-    { value: "pallet_wrap", label: "Pallet Wrap", tenant_id: "TNT000001", is_active: true },
-    { value: "bubble_wrap", label: "Bubble Wrap", tenant_id: "TNT000001", is_active: true },
-    { value: "crate", label: "Crate", tenant_id: "TNT000001", is_active: true },
-    { value: "envelope", label: "Envelope", tenant_id: "TNT000001", is_active: true },
-    { value: "standard_box", label: "Standard Box", tenant_id: "TNT000002", is_active: true },
-    { value: "pallet_wrap", label: "Pallet Wrap", tenant_id: "TNT000002", is_active: true },
-  ],
+  { value: "standard box",  label: "Standard Box",  tenant_id: "TNT000001", is_active: true },
+  { value: "pallet wrap",   label: "Pallet Wrap",   tenant_id: "TNT000001", is_active: true },
+  { value: "wooden crate",  label: "Wooden Crate",  tenant_id: "TNT000001", is_active: true },
+  { value: "standard box",  label: "Standard Box",  tenant_id: "TNT000002", is_active: true },
+  { value: "pallet wrap",   label: "Pallet Wrap",   tenant_id: "TNT000002", is_active: true },
+  { value: "wooden crate",  label: "Wooden Crate",  tenant_id: "TNT000002", is_active: true },
+],
   shipments: [
     {
-      shipment_id: "SHP000031",
+      shipment_id: "SHP000001",
+      order_id: "ORD000001",
       tenant_id: "TNT000001",
       warehouse_id: "WH000001",
-      pack_ids: ["PAK000033"],
-      customer_id: "CUS000001",
+      pack_ids: ["PAK000001"],
+      customer_id: null,
       customer_name: "RetailMax",
       carrier: "FedEx Ground",
       tracking_no: "FX123456789",
       status: "dispatched",
-      ship_by: "2026-02-08T16:00:00.000Z",
-      dispatch_due_at: "2026-02-08T16:00:00.000Z",
+      ship_by: null,
+      dispatch_due_at: null,
       dispatched_at: "2026-02-08T17:00:00.000Z",
-      created_at: "2026-02-08T14:55:00.000Z",
+      created_at: "2026-02-08T15:00:00.000Z",
       created_by: "USR000002",
       updated_at: "2026-02-08T17:00:00.000Z",
       updated_by: "USR000002",
     },
     {
-      shipment_id: "SHP000030",
+      shipment_id: "SHP000002",
+      order_id: "ORD000002",
       tenant_id: "TNT000001",
       warehouse_id: "WH000001",
-      pack_ids: [],
-      customer_id: "CUS000002",
+      pack_ids: ["PAK000002"],
+      customer_id: null,
       customer_name: "BuildRight Co",
-      carrier: "UPS Standard",
-      tracking_no: null,
-      status: "pending",
-      ship_by: "2026-02-08T12:00:00.000Z",
-      dispatch_due_at: "2026-02-08T12:00:00.000Z",
-      dispatched_at: null,
-      created_at: "2026-02-08T10:20:00.000Z",
-      created_by: "USR000003",
-      updated_at: "2026-02-08T10:20:00.000Z",
-      updated_by: "USR000003",
-    },
-    {
-      shipment_id: "SHP000032",
-      tenant_id: "TNT000001",
-      warehouse_id: "WH000001",
-      pack_ids: ["PAK000034"],
-      customer_id: "CUS000003",
-      customer_name: "Northline Stores",
-      carrier: "DHL Express",
+      carrier: null,
       tracking_no: null,
       status: "packed",
-      ship_by: "2026-02-10T10:00:00.000Z",
-      dispatch_due_at: "2026-02-10T10:00:00.000Z",
+      ship_by: null,
+      dispatch_due_at: null,
       dispatched_at: null,
-      created_at: "2026-02-09T12:00:00.000Z",
+      created_at: "2026-02-09T11:30:00.000Z",
       created_by: "USR000002",
-      updated_at: "2026-02-09T12:10:00.000Z",
+      updated_at: "2026-02-09T11:30:00.000Z",
       updated_by: "USR000002",
     },
+    // Tenant 2
     {
       shipment_id: "SHP100001",
+      order_id: null,
       tenant_id: "TNT000002",
       warehouse_id: "WH000003",
       pack_ids: ["PAK100001"],
-      customer_id: "CUS100001",
+      customer_id: null,
       customer_name: "Tenant2 Retail",
       carrier: "FedEx International",
       tracking_no: null,
       status: "pending",
-      ship_by: "2026-02-09T12:00:00.000Z",
-      dispatch_due_at: "2026-02-09T12:00:00.000Z",
+      ship_by: null,
+      dispatch_due_at: null,
       dispatched_at: null,
       created_at: "2026-02-09T09:15:00.000Z",
       created_by: "USR100001",
@@ -1472,6 +1566,7 @@ warehouses: [
   ],
 };
 
+loadDb();
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
@@ -1510,6 +1605,11 @@ const sequenceCounters = {
   AUD: getMaxId(db.audit_logs, "audit_id", "AUD"),
   TRC: getMaxId(db.trace_events, "event_id", "TRC"),
   WH: getMaxId(db.warehouses, "warehouse_id", "WH"),
+  ZON: getMaxId(db.taxonomy_zones, "zone_id", "ZON"),
+  AIL: getMaxId(db.aisles, "aisle_id", "AIL"),
+  BAY: getMaxId(db.bays, "bay_id", "BAY"),
+  BIN: getMaxId(db.bins, "bin_id", "BIN"),
+  SLT: getMaxId(db.slots, "slot_id", "SLT"),
 };
 
 function nextPrefixedId(prefix, padLength = 6) {
@@ -1605,28 +1705,58 @@ function deleteWarehouse(tenantId, warehouseId) {
   return true;
 }
 
+function enrichAsnLines(asn) {
+  if (!asn) return asn;
+  return {
+    ...asn,
+    lines: (asn.lines || []).map((line) => {
+      const sku = db.skus.find((s) => s.sku_id === line.sku_id);
+      return { ...line, sku_name: sku?.description || line.sku_name || null };
+    }),
+  };
+}
+
 function listAsns(tenantId) {
   return clone(
     db.asns
       .filter((item) => item.tenant_id === tenantId)
-      .sort((a, b) => b.asn_id.localeCompare(a.asn_id)),
+      .sort((a, b) => b.asn_id.localeCompare(a.asn_id))
+      .map(enrichAsnLines),   // ← tambah baris ni
   );
 }
 
 function getAsn(tenantId, asnId) {
-  return db.asns.find((item) => item.tenant_id === tenantId && item.asn_id === asnId) || null;
+  const asn = db.asns.find((item) => item.tenant_id === tenantId && item.asn_id === asnId) || null;
+  return asn ? enrichAsnLines(clone(asn)) : null;   // ← ganti return ni
 }
 
-function createAsn({ tenantId, warehouseId, userId, supplierId, eta, notes, linesCount }) {
-  const supplier = getSupplier(tenantId, supplierId);
-  if (!supplier) {
+function createAsn({
+  tenantId,
+  warehouseId,
+  userId,
+  supplierId,
+  supplier: authoritativeSupplier,
+  eta,
+  notes,
+  linesCount,
+  lines,
+}) {
+  const supplier = authoritativeSupplier || getSupplier(tenantId, supplierId);
+  if (!supplier || supplier.supplier_id !== supplierId) {
     return { error: "Supplier not found" };
   }
 
-  if (!supplier.is_active) {
+  const isActive = supplier.is_active ?? supplier.status === "active";
+  if (!isActive) {
     return { error: "Supplier is inactive" };
   }
 
+  const normalizedLines = Array.isArray(lines) && lines.length > 0
+    ? lines.map((l, idx) => {
+        const sku = db.skus.find((s) => s.sku_id === l.sku_id);
+        return { line_no: idx + 1, sku_id: l.sku_id, sku_name: sku?.description || l.sku_name || null, expected_qty: Number(l.expected_qty || 0) };
+      })
+    : [];
   const now = new Date().toISOString();
   const asn = {
     asn_id: nextPrefixedId("ASN"),
@@ -1634,7 +1764,7 @@ function createAsn({ tenantId, warehouseId, userId, supplierId, eta, notes, line
     supplier_name: supplier.supplier_name,
     eta: eta || now.slice(0, 10),
     status: "draft",
-    lines_count: Number(linesCount || 0),
+    lines_count: normalizedLines.length || Number(linesCount || 0),
     notes: notes || "",
     tenant_id: tenantId,
     warehouse_id: warehouseId || null,
@@ -1644,31 +1774,56 @@ function createAsn({ tenantId, warehouseId, userId, supplierId, eta, notes, line
     cancellation_reason: null,
     cancelled_by: null,
     cancelled_at: null,
+    lines: normalizedLines,
   };
 
   db.asns.push(asn);
-  return { data: clone(asn) };
+  saveDb(); saveDb(); return { data: clone(asn) };
+}
+
+function enrichGrnLines(grn) {
+  if (!grn) return grn;
+  return {
+    ...grn,
+    lines: (grn.lines || []).map((line) => {
+      const sku = db.skus.find((s) => s.sku_id === line.sku_id);
+      return { ...line, sku_name: sku?.description || null };
+    }),
+  };
 }
 
 function listGrns(tenantId) {
   return clone(
     db.grns
       .filter((item) => item.tenant_id === tenantId)
-      .sort((a, b) => b.grn_id.localeCompare(a.grn_id)),
+      .sort((a, b) => b.grn_id.localeCompare(a.grn_id))
+      .map(enrichGrnLines),   // ← tambah ni
   );
 }
 
 function getGrn(tenantId, grnId) {
-  return db.grns.find((item) => item.tenant_id === tenantId && item.grn_id === grnId) || null;
+  const grn = db.grns.find((item) => item.tenant_id === tenantId && item.grn_id === grnId) || null;
+  return grn ? enrichGrnLines(clone(grn)) : null;
 }
 
 function defaultLinesFromAsn(asn) {
+  if (Array.isArray(asn?.lines) && asn.lines.length > 0) {
+    return asn.lines.map((l, idx) => ({
+      line_no:      idx + 1,
+      sku_id:       l.sku_id,
+      sku_name:     l.sku_name || null,
+      expected_qty: Number(l.expected_qty || 0),
+      received_qty: 0,
+    }));
+  }
+  // fallback kalau ASN takde lines
   const lineCount = Math.max(1, Number(asn?.lines_count || 1));
   return Array.from({ length: lineCount }).map((_, index) => ({
     line_no: index + 1,
     sku_id: `SKU${String(index + 1).padStart(6, "0")}`,
+    sku_name: null,
     expected_qty: 10,
-    received_qty: 10,
+    received_qty: 0,
   }));
 }
 
@@ -1680,6 +1835,7 @@ function normalizeLines(lines) {
   return lines.map((line, index) => ({
     line_no: index + 1,
     sku_id: line.sku_id || `SKU${String(index + 1).padStart(6, "0")}`,
+    sku_name: line.sku_name || null,
     expected_qty: Number(line.expected_qty || 0),
     received_qty: Number(line.received_qty || 0),
   }));
@@ -1722,12 +1878,23 @@ function generatePutawayTasks(grn) {
 
   }
 }
-function createGrn({ tenantId, warehouseId, userId, asnId, supplierId, receivedDate, notes, lines }) {
+function createGrn({
+  tenantId,
+  warehouseId,
+  userId,
+  asnId,
+  asn: authoritativeAsn,
+  supplierId,
+  supplier: authoritativeSupplier,
+  receivedDate,
+  notes,
+  lines,
+}) {
   let resolvedSupplierId = supplierId;
   let resolvedSupplierName = "";
 
   if (asnId) {
-    const asn = getAsn(tenantId, asnId);
+    const asn = authoritativeAsn || getAsn(tenantId, asnId);
     if (!asn) {
       return { error: "ASN not found" };
     }
@@ -1738,12 +1905,13 @@ function createGrn({ tenantId, warehouseId, userId, asnId, supplierId, receivedD
     }
   }
 
-  const supplier = getSupplier(tenantId, resolvedSupplierId);
+  const supplier = authoritativeSupplier || getSupplier(tenantId, resolvedSupplierId);
   if (!supplier) {
     return { error: "Supplier not found" };
   }
 
-  if (!supplier.is_active) {
+  const isActive = supplier.is_active ?? supplier.status === "active";
+  if (!isActive) {
     return { error: "Supplier is inactive" };
   }
 
@@ -1770,7 +1938,7 @@ function createGrn({ tenantId, warehouseId, userId, asnId, supplierId, receivedD
 
   db.grns.push(grn);
   generatePutawayTasks(grn);
-  return { data: clone(grn) };
+  saveDb(); saveDb(); return { data: clone(grn) };
 }
 
 function updateAsn(tenantId, asnId, updater) {
@@ -2265,6 +2433,148 @@ function getPickList(tenantId, pickListId, warehouseId = null) {
   return clone(item);
 }
 
+export function scanPickListLineUnit(tenantId, pickListId, lineId, scannedBy) {
+  const item = db.pick_lists.find(
+    (row) => row.tenant_id === tenantId && row.pick_list_id === pickListId,
+  );
+  if (!item) return { error: "Pick list not found" };
+
+  const lineIndex = item.lines.findIndex((l) => l.line_id === lineId);
+  if (lineIndex === -1) return { error: "Line not found in pick list" };
+
+  const line = item.lines[lineIndex];
+
+  if (line.status === "picked") {
+    return { error: "Line is already completed" };
+  }
+
+  const qtyRequired  = Number(line.qty_required || 0);
+  const currentCount = Number(line.scan_count   || 0);
+
+  // Block over pick
+  if (currentCount >= qtyRequired) {
+    return {
+      error:        `Over pick — required qty is ${qtyRequired}, already scanned ${currentCount}`,
+      over_pick:    true,
+      scan_count:   currentCount,
+      qty_required: qtyRequired,
+    };
+  }
+
+  const newCount = currentCount + 1;
+  const now      = new Date().toISOString();
+
+  // Init scan_entries array if not exists
+  if (!Array.isArray(line.scan_entries)) {
+    line.scan_entries = [];
+  }
+
+  // Record this scan
+  line.scan_entries.push({
+    scan_id:    `SCN${String(line.scan_entries.length + 1).padStart(6, "0")}`,
+    scanned_by: scannedBy,
+    scanned_at: now,
+  });
+
+  // Update counts
+  line.scan_count = newCount;
+  line.qty_picked = newCount;
+  line.updated_at = now;
+
+  // Auto-complete line when scan_count reaches qty_required
+  if (newCount >= qtyRequired) {
+    line.status    = "picked";
+    line.picked_by = scannedBy;
+    line.picked_at = now;
+  } else {
+    line.status = "picking";
+  }
+
+  item.updated_at = now;
+
+  // Auto-advance pick list to in_progress if still pending
+  if (["pending", "picking"].includes(item.status)) {
+    item.status = "in_progress";
+  }
+
+  return {
+    data: clone(item),
+    line_completed: newCount >= qtyRequired,
+    scan_count:     newCount,
+    qty_required:   qtyRequired,
+  };
+}
+
+// Undo last scan for a line
+export function undoPickListLineScan(tenantId, pickListId, lineId) {
+  const item = db.pick_lists.find(
+    (row) => row.tenant_id === tenantId && row.pick_list_id === pickListId,
+  );
+  if (!item) return { error: "Pick list not found" };
+
+  const lineIndex = item.lines.findIndex((l) => l.line_id === lineId);
+  if (lineIndex === -1) return { error: "Line not found in pick list" };
+
+  const line = item.lines[lineIndex];
+
+  const currentCount = Number(line.scan_count || 0);
+  if (currentCount <= 0) {
+    return { error: "No scans to undo" };
+  }
+
+  const newCount = currentCount - 1;
+  const now      = new Date().toISOString();
+
+  // Remove last scan entry
+  if (Array.isArray(line.scan_entries) && line.scan_entries.length > 0) {
+    line.scan_entries.pop();
+  }
+
+  line.scan_count = newCount;
+  line.qty_picked = newCount;
+  line.updated_at = now;
+
+  // Revert status
+  if (newCount === 0) {
+    line.status    = "pending";
+    line.picked_by = null;
+    line.picked_at = null;
+  } else {
+    line.status = "picking";
+  }
+
+  item.updated_at = now;
+
+  return {
+    data:         clone(item),
+    scan_count:   newCount,
+    qty_required: Number(line.qty_required || 0),
+  };
+}
+
+export function updatePickListLine(tenantId, pickListId, lineId, updater) {
+  // Find pick list directly in db (not clone) so mutation persists
+  const item = db.pick_lists.find(
+    (row) => row.tenant_id === tenantId && row.pick_list_id === pickListId,
+  );
+
+  if (!item) {
+    return { error: "Pick list not found" };
+  }
+
+  const lineIndex = item.lines.findIndex((l) => l.line_id === lineId);
+  if (lineIndex === -1) {
+    return { error: "Line not found in pick list" };
+  }
+
+  // Mutate directly in db array — no clone, so change persists in memory
+  item.lines[lineIndex] = updater(item.lines[lineIndex]);
+  item.updated_at = new Date().toISOString();
+
+  // Return clone so caller gets a safe copy
+  saveDb(); saveDb(); return { data: clone(item) };
+}
+
 function updatePickList(tenantId, pickListId, updater, warehouseId = null) {
   const idx = db.pick_lists.findIndex((row) => row.tenant_id === tenantId && row.pick_list_id === pickListId);
   if (idx < 0) {
@@ -2329,7 +2639,9 @@ function updatePickListStatusBySource({
     (current) => ({
       ...current,
       status: normalizedStatus,
-      started_at: normalizedStatus === "picking" ? current.started_at || now : current.started_at,
+      started_at: ["picking", "picked", "completed"].includes(normalizedStatus)
+      ? current.started_at || now
+      : current.started_at,
       completed_at: ["picked", "verified", "completed", "packed", "shipped"].includes(normalizedStatus)
         ? current.completed_at || now
         : current.completed_at,
@@ -2347,6 +2659,32 @@ function updatePickListStatusBySource({
   return { data: updated };
 }
 
+function cancelPickList(tenantId, pickListId, { reason, cancelledBy, cancelledAt }) {
+  const idx = db.pick_lists.findIndex(
+    (row) => row.tenant_id === tenantId && row.pick_list_id === pickListId,
+  );
+  if (idx < 0) return null;
+  const now = cancelledAt || new Date().toISOString();
+  db.pick_lists[idx] = {
+    ...db.pick_lists[idx],
+    status:              "cancelled",
+    cancellation_reason: reason,
+    cancelled_by:        cancelledBy,
+    cancelled_at:        now,
+    updated_at:          now,
+  };
+  return JSON.parse(JSON.stringify(db.pick_lists[idx]));
+}
+
+function patchPickListMeta(tenantId, pickListId, fields) {
+  const idx = db.pick_lists.findIndex(
+    (row) => row.tenant_id === tenantId && row.pick_list_id === pickListId,
+  );
+  if (idx < 0) return null;
+  db.pick_lists[idx] = { ...db.pick_lists[idx], ...fields };
+  return JSON.parse(JSON.stringify(db.pick_lists[idx]));
+}
+
 function listPackagingTypes(tenantId) {
   return clone(
     db.lov_packaging_types
@@ -2362,6 +2700,7 @@ function listPackOrders({
   search = "",
   status = "",
   pickListId = "",
+  assignedUser = "",
   warehouseId = null,
 }) {
   const safePage = Number.isFinite(Number(page)) && Number(page) > 0 ? Number(page) : 1;
@@ -2373,6 +2712,11 @@ function listPackOrders({
   const rows = db.pack_orders
     .filter((item) => item.tenant_id === tenantId)
     .filter((item) => (warehouseId ? item.warehouse_id === warehouseId : true))
+    .filter((item) => {
+      if (!assignedUser) return true;
+      const pickList = db.pick_lists.find((p) => p.pick_list_id === item.pick_list_id);
+      return pickList?.assigned_to_user_id === assignedUser;
+    })
     .filter((item) => !statusFilter || normalizeSearchValue(item.status) === statusFilter)
     .filter((item) => !pickListFilter || normalizeSearchValue(item.pick_list_id).includes(pickListFilter))
     .filter((item) => {
@@ -2595,6 +2939,7 @@ function confirmPackingOrder({
       packaging_type: packagingType || current.packaging_type,
       status: "packed",
       packed_at: now,
+      packed_by: getUserById(tenantId, userId)?.user_name || userId,
       updated_at: now,
       updated_by: userId,
       last_update_source: "PORTAL",
@@ -2618,7 +2963,48 @@ function confirmPackingOrder({
   if (pickListStatusResult.error) {
     return { error: pickListStatusResult.error };
   }
+  // Auto-create shipment bila pack order jadi packed
+  const existingShipment = db.shipments.find(
+    (s) => s.tenant_id === tenantId && s.pack_ids?.includes(packId)
+  );
 
+  if (!existingShipment) {
+    const now2 = new Date().toISOString();
+    // Resolve order_id from pick list
+    const packOrderForShipment = getPackOrder(tenantId, packId, warehouseId);
+    const pickListForShipment  = packOrderForShipment
+      ? getPickList(tenantId, packOrderForShipment.pick_list_id, warehouseId)
+      : null;
+    const resolvedOrderId = pickListForShipment?.order_id || null;
+
+    const newShipment = {
+      shipment_id:      nextPrefixedId("SHP"),
+      tenant_id:        tenantId,
+      warehouse_id:     warehouseId || null,
+      pack_ids:         [packId],
+      order_id:         resolvedOrderId,
+      customer_id:      null,
+      customer_name: (() => {
+        const ord = db.orders?.find(
+          (o) => o.tenant_id === tenantId && o.order_id === resolvedOrderId
+        );
+        return ord?.customer_name || "Pending Assignment";
+      })(),
+      carrier:          null,
+      tracking_no:      null,
+      status:           "packed",
+      ship_by:          null,
+      dispatch_due_at: db.orders?.find(
+        (o) => o.tenant_id === tenantId && o.order_id === resolvedOrderId
+      )?.ship_by || null,
+      dispatched_at:    null,
+      created_at:       now2,
+      created_by:       userId,
+      updated_at:       now2,
+      updated_by:       userId,
+    };
+    db.shipments.push(newShipment);
+  }
   return { data: updated };
 }
 
@@ -2699,10 +3085,35 @@ function listShipments({
       return [item.shipment_id, item.customer_name, item.customer_id, item.carrier, item.tracking_no, item.status]
         .some((field) => normalizeSearchValue(field).includes(searchValue));
     })
-    .map((item) => ({
-      ...item,
-      is_overdue: isShipmentOverdue(item, nowDate),
-    }))
+    .map((item) => {
+      // Collect all pick list lines across all pack_ids
+      const hydratedItems = (item.pack_ids || []).flatMap((packId) => {
+        const packOrder = db.pack_orders.find(
+          (p) => p.tenant_id === tenantId && p.pack_id === packId
+        );
+        if (!packOrder) return [];
+
+        const pickList = db.pick_lists.find(
+          (p) => p.tenant_id === tenantId && p.pick_list_id === packOrder.pick_list_id
+        );
+        if (!pickList) return [];
+
+        return (pickList.lines || []).map((line) => ({
+          sku_id:      line.sku_id,
+          location_id: line.location_id,
+          qty:         line.qty_required,
+          qty_picked:  line.qty_picked,
+          status:      line.status,
+          pack_id:     packId,
+        }));
+      });
+
+      return {
+        ...item,
+        is_overdue: isShipmentOverdue(item, nowDate),
+        items: hydratedItems,
+      };
+    })
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
 
   const total = rows.length;
@@ -2852,7 +3263,7 @@ function createInventoryTransaction({
   };
 
   db.inventory_transactions.push(transaction);
-  return { data: clone(transaction) };
+  saveDb(); saveDb(); return { data: clone(transaction) };
 }
 
 function isQuarantineLocation(tenantId, locationId) {
@@ -3697,7 +4108,7 @@ function createAdjustmentRequest({
   };
 
   db.adjustment_requests.push(request);
-  return { data: clone(request) };
+  saveDb(); saveDb(); return { data: clone(request) };
 }
 
 function submitAdjustmentRequest({
@@ -4329,7 +4740,7 @@ function createSku({ skuId, description, uomId, epcValue }) {
   };
 
   db.skus.push(sku);
-  return { data: clone(sku) };
+  saveDb(); saveDb(); return { data: clone(sku) };
 }
 
 function updateSku(skuId, { description, uomId, epcValue }) {
@@ -4353,6 +4764,343 @@ function deleteSku(skuId) {
   return true;
 }
 
+function createPackOrderFromPickList(tenantId, pickListId, warehouseId, userId) {
+  // Semak pack order dah wujud ke belum
+  const existing = db.pack_orders.find(
+    (p) => p.tenant_id === tenantId && p.pick_list_id === pickListId
+  );
+  if (existing) return { data: existing };
+
+  const pickList = getPickList(tenantId, pickListId, warehouseId);
+  if (!pickList) return { error: "Pick list not found" };
+
+  const now = new Date().toISOString();
+  const newPack = {
+    pack_id:              nextPrefixedId("PAK"),
+    tenant_id:            tenantId,
+    warehouse_id:         warehouseId || pickList.warehouse_id || null,
+    pick_list_id:         pickListId,
+    order_id:             pickList.order_id || null,
+    status:               "draft",
+    carton_id:            null,
+    packaging_type:       null,
+    weight_kg:            null,
+    packed_at:            null,
+    created_at:           now,
+    created_by:           userId,
+    updated_at:           now,
+    updated_by:           userId,
+    last_update_source:   "SYSTEM",
+  };
+
+  db.pack_orders.push(newPack);
+  saveDb(); saveDb(); return { data: clone(newPack) };
+}
+
+// ── Location Taxonomy CRUD ────────────────────────────────────────────────────
+
+function buildLocationCode(zoneId, aisleId, bayId, shelfLevel, binSeq, slotSeq) {
+  const zone  = db.taxonomy_zones.find((z) => z.zone_id === zoneId);
+  const aisle = aisleId ? db.aisles.find((a) => a.aisle_id === aisleId) : null;
+  const bay   = bayId   ? db.bays.find((b) => b.bay_id === bayId)       : null;
+  let code = zone?.zone_code ?? "?";
+  if (aisle) code += `-${aisle.aisle_code}`;
+  if (bay)   code += `-${bay.bay_code}`;
+  if (shelfLevel != null) code += `-L${shelfLevel}`;
+  if (binSeq  != null) code += `-B${String(binSeq).padStart(2, "0")}`;
+  if (slotSeq != null) code += `-S${String(slotSeq).padStart(2, "0")}`;
+  return code;
+}
+
+function listTaxonomyZones(tenantId, warehouseId) {
+  return clone(
+    db.taxonomy_zones
+      .filter((z) => z.tenant_id === tenantId && (!warehouseId || z.warehouse_id === warehouseId))
+      .sort((a, b) => a.zone_id.localeCompare(b.zone_id)),
+  );
+}
+
+function getTaxonomyZone(tenantId, zoneId) {
+  return db.taxonomy_zones.find((z) => z.tenant_id === tenantId && z.zone_id === zoneId) || null;
+}
+
+function createTaxonomyZone(tenantId, { zoneCode, zoneName, zoneType, warehouseId }) {
+  if (!zoneCode?.trim() || !zoneName?.trim()) return { error: "zone_code and zone_name are required" };
+  const dup = db.taxonomy_zones.find(
+    (z) => z.tenant_id === tenantId && z.warehouse_id === warehouseId && z.zone_code.toLowerCase() === zoneCode.trim().toLowerCase(),
+  );
+  if (dup) return { error: `Zone code "${zoneCode}" already exists in this warehouse` };
+  const zone = {
+    zone_id: nextPrefixedId("ZON"),
+    zone_code: zoneCode.trim().toUpperCase(),
+    zone_name: zoneName.trim(),
+    zone_type: zoneType || "storage",
+    tenant_id: tenantId,
+    warehouse_id: warehouseId,
+    is_active: true,
+  };
+  db.taxonomy_zones.push(zone);
+  saveDb(); saveDb(); return { data: clone(zone) };
+}
+
+function updateTaxonomyZone(tenantId, zoneId, payload) {
+  const idx = db.taxonomy_zones.findIndex((z) => z.tenant_id === tenantId && z.zone_id === zoneId);
+  if (idx < 0) return null;
+  db.taxonomy_zones[idx] = {
+    ...db.taxonomy_zones[idx],
+    zone_name: payload.zone_name !== undefined ? String(payload.zone_name).trim() : db.taxonomy_zones[idx].zone_name,
+    zone_type: payload.zone_type ?? db.taxonomy_zones[idx].zone_type,
+    is_active: payload.is_active !== undefined ? Boolean(payload.is_active) : db.taxonomy_zones[idx].is_active,
+  };
+  saveDb(); saveDb(); return { data: clone(db.taxonomy_zones[idx]) };
+}
+
+function deleteTaxonomyZone(tenantId, zoneId) {
+  const hasAisles = db.aisles.some((a) => a.tenant_id === tenantId && a.zone_id === zoneId);
+  if (hasAisles) return { error: "Zone has aisles. Remove aisles first." };
+  const idx = db.taxonomy_zones.findIndex((z) => z.tenant_id === tenantId && z.zone_id === zoneId);
+  if (idx < 0) return { error: "Zone not found" };
+  db.taxonomy_zones.splice(idx, 1);
+  return { deleted: true };
+}
+
+function listAisles(tenantId, { warehouseId, zoneId } = {}) {
+  return clone(
+    db.aisles
+      .filter((a) =>
+        a.tenant_id === tenantId &&
+        (!warehouseId || a.warehouse_id === warehouseId) &&
+        (!zoneId || a.zone_id === zoneId),
+      )
+      .sort((a, b) => a.aisle_id.localeCompare(b.aisle_id)),
+  );
+}
+
+function getAisle(tenantId, aisleId) {
+  return db.aisles.find((a) => a.tenant_id === tenantId && a.aisle_id === aisleId) || null;
+}
+
+function createAisle(tenantId, { zoneId, aisleName, warehouseId }) {
+  if (!zoneId || !aisleName?.trim()) return { error: "zone_id and aisle_name are required" };
+  const zone = getTaxonomyZone(tenantId, zoneId);
+  if (!zone) return { error: "Zone not found" };
+  const existing = db.aisles.filter((a) => a.tenant_id === tenantId && a.zone_id === zoneId);
+  const maxSeq = existing.reduce((max, a) => { const n = parseInt(a.aisle_code, 10) || 0; return n > max ? n : max; }, 0);
+  const aisleCode = String(maxSeq + 1).padStart(2, "0");
+  const aisle = {
+    aisle_id: nextPrefixedId("AIL"),
+    aisle_code: aisleCode,
+    aisle_name: aisleName.trim(),
+    zone_id: zoneId,
+    tenant_id: tenantId,
+    warehouse_id: warehouseId || zone.warehouse_id,
+    is_active: true,
+    location_code: `${zone.zone_code}-${aisleCode}`,
+  };
+  db.aisles.push(aisle);
+  saveDb(); saveDb(); return { data: clone(aisle) };
+}
+
+function updateAisle(tenantId, aisleId, payload) {
+  const idx = db.aisles.findIndex((a) => a.tenant_id === tenantId && a.aisle_id === aisleId);
+  if (idx < 0) return null;
+  db.aisles[idx] = {
+    ...db.aisles[idx],
+    aisle_name: payload.aisle_name !== undefined ? String(payload.aisle_name).trim() : db.aisles[idx].aisle_name,
+    is_active: payload.is_active !== undefined ? Boolean(payload.is_active) : db.aisles[idx].is_active,
+  };
+  saveDb(); saveDb(); return { data: clone(db.aisles[idx]) };
+}
+
+function deleteAisle(tenantId, aisleId) {
+  const hasBays = db.bays.some((b) => b.tenant_id === tenantId && b.aisle_id === aisleId);
+  if (hasBays) return { error: "Aisle has bays. Remove bays first." };
+  const idx = db.aisles.findIndex((a) => a.tenant_id === tenantId && a.aisle_id === aisleId);
+  if (idx < 0) return { error: "Aisle not found" };
+  db.aisles.splice(idx, 1);
+  return { deleted: true };
+}
+
+function listBays(tenantId, { warehouseId, zoneId, aisleId } = {}) {
+  return clone(
+    db.bays
+      .filter((b) =>
+        b.tenant_id === tenantId &&
+        (!warehouseId || b.warehouse_id === warehouseId) &&
+        (!zoneId  || b.zone_id  === zoneId) &&
+        (!aisleId || b.aisle_id === aisleId),
+      )
+      .sort((a, b) => a.bay_id.localeCompare(b.bay_id)),
+  );
+}
+
+function getBay(tenantId, bayId) {
+  return db.bays.find((b) => b.tenant_id === tenantId && b.bay_id === bayId) || null;
+}
+
+function createBay(tenantId, { aisleId, bayName, widthCm, depthCm, levelHeightCm, levelCount, maxWeightKg }) {
+  if (!aisleId || !bayName?.trim()) return { error: "aisle_id and bay_name are required" };
+  const aisle = getAisle(tenantId, aisleId);
+  if (!aisle) return { error: "Aisle not found" };
+  const existing = db.bays.filter((b) => b.tenant_id === tenantId && b.aisle_id === aisleId);
+  const maxSeq = existing.reduce((max, b) => { const n = parseInt(b.bay_code, 10) || 0; return n > max ? n : max; }, 0);
+  const bayCode = String(maxSeq + 1).padStart(3, "0");
+  const bay = {
+    bay_id: nextPrefixedId("BAY"),
+    bay_code: bayCode,
+    bay_name: bayName.trim(),
+    aisle_id: aisleId,
+    zone_id: aisle.zone_id,
+    tenant_id: tenantId,
+    warehouse_id: aisle.warehouse_id,
+    width_cm: Number(widthCm) || 200,
+    depth_cm: Number(depthCm) || 50,
+    level_height_cm: Number(levelHeightCm) || 50,
+    level_count: Number(levelCount) || 4,
+    max_weight_kg: Number(maxWeightKg) || 500,
+    is_active: true,
+    location_code: buildLocationCode(aisle.zone_id, aisleId, null, null, null, null) + `-${bayCode}`,
+  };
+  db.bays.push(bay);
+  saveDb(); saveDb(); return { data: clone(bay) };
+}
+
+function updateBay(tenantId, bayId, payload) {
+  const idx = db.bays.findIndex((b) => b.tenant_id === tenantId && b.bay_id === bayId);
+  if (idx < 0) return null;
+  db.bays[idx] = {
+    ...db.bays[idx],
+    bay_name:        payload.bay_name        !== undefined ? String(payload.bay_name).trim()       : db.bays[idx].bay_name,
+    width_cm:        payload.width_cm        !== undefined ? Number(payload.width_cm)              : db.bays[idx].width_cm,
+    depth_cm:        payload.depth_cm        !== undefined ? Number(payload.depth_cm)              : db.bays[idx].depth_cm,
+    level_height_cm: payload.level_height_cm !== undefined ? Number(payload.level_height_cm)       : db.bays[idx].level_height_cm,
+    level_count:     payload.level_count     !== undefined ? Number(payload.level_count)           : db.bays[idx].level_count,
+    max_weight_kg:   payload.max_weight_kg   !== undefined ? Number(payload.max_weight_kg)         : db.bays[idx].max_weight_kg,
+    is_active:       payload.is_active       !== undefined ? Boolean(payload.is_active)            : db.bays[idx].is_active,
+  };
+  saveDb(); saveDb(); return { data: clone(db.bays[idx]) };
+}
+
+function deleteBay(tenantId, bayId) {
+  const hasBins = db.bins.some((b) => b.tenant_id === tenantId && b.bay_id === bayId);
+  if (hasBins) return { error: "Bay has bins. Remove bins first." };
+  const idx = db.bays.findIndex((b) => b.tenant_id === tenantId && b.bay_id === bayId);
+  if (idx < 0) return { error: "Bay not found" };
+  db.bays.splice(idx, 1);
+  return { deleted: true };
+}
+
+function listBins(tenantId, { warehouseId, zoneId, aisleId, bayId } = {}) {
+  return clone(
+    db.bins
+      .filter((b) =>
+        b.tenant_id === tenantId &&
+        (!warehouseId || b.warehouse_id === warehouseId) &&
+        (!zoneId  || b.zone_id  === zoneId) &&
+        (!aisleId || b.aisle_id === aisleId) &&
+        (!bayId   || b.bay_id   === bayId),
+      )
+      .sort((a, b) => a.bin_id.localeCompare(b.bin_id)),
+  );
+}
+
+function getBin(tenantId, binId) {
+  return db.bins.find((b) => b.tenant_id === tenantId && b.bin_id === binId) || null;
+}
+
+function createBin(tenantId, { bayId, shelfLevel }) {
+  if (!bayId || shelfLevel == null) return { error: "bay_id and shelf_level are required" };
+  const bay = getBay(tenantId, bayId);
+  if (!bay) return { error: "Bay not found" };
+  if (Number(shelfLevel) < 1 || Number(shelfLevel) > bay.level_count)
+    return { error: `shelf_level must be between 1 and ${bay.level_count}` };
+  const existing = db.bins.filter((b) => b.tenant_id === tenantId && b.bay_id === bayId && b.shelf_level === Number(shelfLevel));
+  const maxSeq = existing.reduce((max, b) => { const m = /B(\d+)/.exec(b.bin_code); return m ? Math.max(max, parseInt(m[1], 10)) : max; }, 0);
+  const binSeq = maxSeq + 1;
+  const bin = {
+    bin_id: nextPrefixedId("BIN"),
+    bin_code: `B${String(binSeq).padStart(2, "0")}`,
+    shelf_level: Number(shelfLevel),
+    bay_id: bayId,
+    aisle_id: bay.aisle_id,
+    zone_id: bay.zone_id,
+    tenant_id: tenantId,
+    warehouse_id: bay.warehouse_id,
+    is_active: true,
+    location_code: buildLocationCode(bay.zone_id, bay.aisle_id, bayId, Number(shelfLevel), binSeq, null),
+  };
+  db.bins.push(bin);
+  saveDb(); saveDb(); return { data: clone(bin) };
+}
+
+function updateBin(tenantId, binId, payload) {
+  const idx = db.bins.findIndex((b) => b.tenant_id === tenantId && b.bin_id === binId);
+  if (idx < 0) return null;
+  db.bins[idx] = { ...db.bins[idx], is_active: payload.is_active !== undefined ? Boolean(payload.is_active) : db.bins[idx].is_active };
+  saveDb(); saveDb(); return { data: clone(db.bins[idx]) };
+}
+
+function deleteBin(tenantId, binId) {
+  const hasSlots = db.slots.some((s) => s.tenant_id === tenantId && s.bin_id === binId);
+  if (hasSlots) return { error: "Bin has slots. Remove slots first." };
+  const idx = db.bins.findIndex((b) => b.tenant_id === tenantId && b.bin_id === binId);
+  if (idx < 0) return { error: "Bin not found" };
+  db.bins.splice(idx, 1);
+  return { deleted: true };
+}
+
+function listSlots(tenantId, { warehouseId, binId, bayId } = {}) {
+  return clone(
+    db.slots
+      .filter((s) =>
+        s.tenant_id === tenantId &&
+        (!warehouseId || s.warehouse_id === warehouseId) &&
+        (!binId || s.bin_id === binId) &&
+        (!bayId || s.bay_id === bayId),
+      )
+      .sort((a, b) => a.slot_id.localeCompare(b.slot_id)),
+  );
+}
+
+function createSlot(tenantId, { binId }) {
+  if (!binId) return { error: "bin_id is required" };
+  const bin = getBin(tenantId, binId);
+  if (!bin) return { error: "Bin not found" };
+  const existing = db.slots.filter((s) => s.tenant_id === tenantId && s.bin_id === binId);
+  const slotSeq = existing.length + 1;
+  const binSeqMatch = /B(\d+)/.exec(bin.bin_code);
+  const binSeq = binSeqMatch ? parseInt(binSeqMatch[1], 10) : 1;
+  const slot = {
+    slot_id: nextPrefixedId("SLT"),
+    slot_code: `S${String(slotSeq).padStart(2, "0")}`,
+    bin_id: binId,
+    bay_id: bin.bay_id,
+    aisle_id: bin.aisle_id,
+    zone_id: bin.zone_id,
+    tenant_id: tenantId,
+    warehouse_id: bin.warehouse_id,
+    is_active: true,
+    location_code: buildLocationCode(bin.zone_id, bin.aisle_id, bin.bay_id, bin.shelf_level, binSeq, slotSeq),
+  };
+  db.slots.push(slot);
+  saveDb(); saveDb(); return { data: clone(slot) };
+}
+
+function updateSlot(tenantId, slotId, payload) {
+  const idx = db.slots.findIndex((s) => s.tenant_id === tenantId && s.slot_id === slotId);
+  if (idx < 0) return null;
+  db.slots[idx] = { ...db.slots[idx], is_active: payload.is_active !== undefined ? Boolean(payload.is_active) : db.slots[idx].is_active };
+  saveDb(); saveDb(); return { data: clone(db.slots[idx]) };
+}
+
+function deleteSlot(tenantId, slotId) {
+  const idx = db.slots.findIndex((s) => s.tenant_id === tenantId && s.slot_id === slotId);
+  if (idx < 0) return { error: "Slot not found" };
+  db.slots.splice(idx, 1);
+  return { deleted: true };
+}
+
+
 export {
   addAuditLog,
   addCountEntry,
@@ -4362,6 +5110,8 @@ export {
   assignPutawayTask,
   cancelAdjustmentRequest,
   cancelCountPlan,
+  cancelPickList,
+  patchPickListMeta,
   createAsn,
   createAdjustmentRequest,
   createCountPlan,
@@ -4444,5 +5194,13 @@ export {
   createWarehouse,
   updateWarehouse,
   deleteWarehouse,
+  createPackOrderFromPickList,
+  // Taxonomy
+  listTaxonomyZones, getTaxonomyZone, createTaxonomyZone, updateTaxonomyZone, deleteTaxonomyZone,
+  listAisles, getAisle, createAisle, updateAisle, deleteAisle,
+  listBays, getBay, createBay, updateBay, deleteBay,
+  listBins, getBin, createBin, updateBin, deleteBin,
+  listSlots, createSlot, updateSlot, deleteSlot,
+  saveDb,
 };
 export { db };

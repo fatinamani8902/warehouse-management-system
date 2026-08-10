@@ -1,14 +1,15 @@
 import express from "express";
+import { getShipment } from "../repositories/OutboundRepository.js";
 import {
-  createReturn,
-  createRma,
-  getReturn,
-  listRmaItems,
-  listRmas,
-  listReturns,
-  updateReturn,
-} from "../data/store.js";
-import { recordAuditEvent, recordStatusTransitionAudit } from "../services/auditLog.js";
+  createRmaForReturn,
+  rmasForReturns,
+} from "../repositories/RmaRepository.js";
+import {
+  createReturnRecord,
+  getReturn as getPostgresReturn,
+  listReturns as listPostgresReturns,
+  updateReturnStatus,
+} from "../repositories/ReturnsRepository.js";
 import {
   canCancelReturn,
   canCreateReturn,
@@ -21,9 +22,19 @@ const router = express.Router();
 const CANCELLABLE_RETURN_STATUSES = new Set(["created"]);
 const RETURN_TERMINAL_STATUSES = new Set(["confirmed", "closed", "cancelled"]);
 const RETURN_TRANSITION_MAP = {
-  confirm: { from: "created",   to: "confirmed" },
+  confirm: { from: "created",   to: "closed"    },
   close:   { from: "confirmed", to: "closed"    },
 };
+
+function auditContext(req) {
+  return {
+    userId: String(req.user_id || "").trim(),
+    roleId: String(req.role_id || "").toLowerCase(),
+    requestId: req.requestId || req.headers["x-request-id"] || null,
+    ipAddress: req.ip || req.socket?.remoteAddress || null,
+    userAgent: req.headers["user-agent"] || null,
+  };
+}
 
 function validateCancelBody(body) {
   const cancellationReason = String(body?.cancellation_reason || "").trim();
@@ -46,14 +57,27 @@ function validateCancelBody(body) {
 }
 
 function toReturnSummary(record, tenantId) {
-  const rmas = listRmas(tenantId).filter((rma) => rma.return_id === record.return_id);
+  const rmas = record.rmas || [];
   const activeRma = rmas.find((rma) => rma.status !== "cancelled");
 
   return {
     ...record,
     rma_count: rmas.length,
     active_rma_id: activeRma?.rma_id || null,
+    rma_id: activeRma?.rma_id || record.rma_id || null,
+    rma_status: activeRma?.status || record.rma_status || null,
+    rma_created_by: activeRma?.created_by || record.rma_created_by || null,
+    rma_created_by_name: activeRma?.created_by_name || record.rma_created_by_name || null,
+    rma_created_by_display: activeRma?.created_by_display || record.rma_created_by_display || null,
+    rma_created_at: activeRma?.created_at || record.rma_created_at || null,
+    linked_rma: activeRma || record.linked_rma || null,
   };
+}
+
+function activeLinkedRma(record) {
+  const linked = record?.linked_rma;
+  if (linked?.rma_id && String(linked.status || "").toLowerCase() !== "cancelled") return linked;
+  return (record?.rmas || []).find((rma) => String(rma.status || "").toLowerCase() !== "cancelled") || null;
 }
 
 function validateCreateReturnBody(body) {
@@ -83,44 +107,64 @@ function validateCreateReturnBody(body) {
   };
 }
 
-function validateRmaItems(items) {
-  if (!Array.isArray(items) || items.length === 0) {
-    return { data: [] };
-  }
-
-  for (const item of items) {
-    const skuId = String(item?.sku_id || "").trim();
-    const qty = Number(item?.qty);
-    if (!skuId) return { error: "Each RMA item must include sku_id" };
-    if (!Number.isFinite(qty) || qty <= 0) return { error: "Each RMA item must include qty greater than 0" };
-  }
-
-  return {
-    data: items.map((item) => ({
-      sku_id: String(item.sku_id).trim(),
-      qty: Number(item.qty),
-      reason_code: item.reason_code ? String(item.reason_code).trim() : "",
-    })),
-  };
+async function returnedQtyForShipmentSku(tenantId, warehouseId, shipmentId, skuId) {
+  const records = await listPostgresReturns({ tenantId, warehouseId });
+  return records
+    .filter((record) =>
+      record.shipment_id === shipmentId &&
+      record.sku_id === skuId &&
+      String(record.status || "").toLowerCase() !== "cancelled"
+    )
+    .reduce((total, record) => total + Number(record.qty || 0), 0);
 }
 
-function toRmaDetail(tenantId, rma) {
-  return {
-    ...rma,
-    items: listRmaItems(tenantId, rma.rma_id),
-  };
+function shipmentLineDeliveredQty(item) {
+  return Number(item?.delivered_qty ?? item?.shipped_qty ?? item?.qty ?? item?.qty_picked ?? item?.qty_required ?? 0);
 }
 
-router.get("/", (req, res) => {
+async function validateReturnEligibility({ tenantId, warehouseId, shipmentId, skuId, qty }) {
+  const shipment = await getShipment(tenantId, warehouseId, shipmentId);
+  if (!shipment) {
+    return { error: "Shipment does not exist for the current warehouse." };
+  }
+  if (String(shipment.status || "").toLowerCase() !== "closed") {
+    return { error: "Return can only be created from a closed shipment." };
+  }
+
+  const line = (shipment.items || []).find((item) => item.sku_id === skuId);
+  if (!line) {
+    return { error: "Selected item was not shipped on this shipment." };
+  }
+
+  const deliveredQty = shipmentLineDeliveredQty(line);
+  const previouslyReturnedQty = await returnedQtyForShipmentSku(tenantId, warehouseId, shipmentId, skuId);
+  const availableToReturn = Math.max(0, deliveredQty - previouslyReturnedQty);
+
+  if (availableToReturn <= 0) {
+    return { error: "Selected item has no available quantity to return." };
+  }
+  if (qty > availableToReturn) {
+    return { error: `Return quantity cannot exceed ${availableToReturn}` };
+  }
+
+  return { shipment, line, deliveredQty, previouslyReturnedQty, availableToReturn };
+}
+
+router.get("/", async (req, res, next) => {
   if (!canViewReturns(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to view returns" });
   }
 
-  const records = listReturns(req.tenant_id).map((record) => toReturnSummary(record, req.tenant_id));
-  return res.json(records);
+  try {
+    const warehouseId = req.headers["x-warehouse-id"] || req.warehouse_id || null;
+    const records = await listPostgresReturns({ tenantId: req.tenant_id, warehouseId });
+    return res.json(records.map((record) => toReturnSummary(record, req.tenant_id)));
+  } catch (error) {
+    return next(error);
+  }
 });
 
-router.post("/", (req, res) => {
+router.post("/", async (req, res, next) => {
   if (!canCreateReturn(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to create returns" });
   }
@@ -132,12 +176,29 @@ router.post("/", (req, res) => {
 
   const userId = req.user_id || "USR000001";
   const warehouseId = req.headers["x-warehouse-id"] || null;
+  let eligibility;
+  try {
+    eligibility = await validateReturnEligibility({
+      tenantId: req.tenant_id,
+      warehouseId,
+      shipmentId: payload.shipmentId,
+      skuId: payload.skuId,
+      qty: payload.qty,
+    });
+    if (eligibility.error) {
+      return res.status(400).json({ message: eligibility.error });
+    }
+  } catch (error) {
+    return next(error);
+  }
 
-  const created = createReturn({
+  const created = await createReturnRecord({
     tenantId: req.tenant_id,
     userId,
+    auditContext: auditContext(req),
     warehouseId,
     shipmentId: payload.shipmentId,
+    salesOrderId: eligibility.shipment?.sales_order_id || eligibility.shipment?.so_id || null,
     customerId: payload.customerId,
     customerName: payload.customerName,
     skuId: payload.skuId,
@@ -147,39 +208,33 @@ router.post("/", (req, res) => {
     notes: payload.notes,
   });
 
-  recordAuditEvent({
-    tenant_id: req.tenant_id,
-    user_id: userId,
-    entity_type: "return",
-    entity_id: created.return_id,
-    action: "create",
-    message: `Return ${created.return_id} created`,
-  });
-
   return res.status(201).json(toReturnSummary(created, req.tenant_id));
 });
 
-router.get("/:returnId", (req, res) => {
+router.get("/:returnId", async (req, res, next) => {
   if (!canViewReturns(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to view returns" });
   }
 
-  const record = getReturn(req.tenant_id, req.params.returnId);
-  if (!record) {
-    return res.status(404).json({ message: "Return not found" });
+  try {
+    const warehouseId = req.headers["x-warehouse-id"] || req.warehouse_id || null;
+    const record = await getPostgresReturn({ tenantId: req.tenant_id, warehouseId, returnId: req.params.returnId });
+    if (!record) {
+      return res.status(404).json({ message: "Return not found" });
+    }
+
+    const relatedRmas = await rmasForReturns({ tenantId: req.tenant_id, warehouseId, returnIds: [record.return_id] });
+
+    return res.json({
+      ...toReturnSummary(record, req.tenant_id),
+      rmas: relatedRmas,
+    });
+  } catch (error) {
+    return next(error);
   }
-
-  const relatedRmas = listRmas(req.tenant_id)
-    .filter((rma) => rma.return_id === record.return_id)
-    .map((rma) => toRmaDetail(req.tenant_id, rma));
-
-  return res.json({
-    ...toReturnSummary(record, req.tenant_id),
-    rmas: relatedRmas,
-  });
 });
 
-router.patch("/:returnId/cancel", (req, res) => {
+router.patch("/:returnId/cancel", async (req, res, next) => {
   if (!canCancelReturn(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to cancel returns" });
   }
@@ -189,53 +244,53 @@ router.patch("/:returnId/cancel", (req, res) => {
     return res.status(400).json({ message: validation.error });
   }
 
-  const record = getReturn(req.tenant_id, req.params.returnId);
-  if (!record) {
-    return res.status(404).json({ message: "Return not found" });
-  }
+  try {
+    const warehouseId = req.headers["x-warehouse-id"] || req.warehouse_id || null;
+    const record = await getPostgresReturn({ tenantId: req.tenant_id, warehouseId, returnId: req.params.returnId });
+    if (!record) {
+      return res.status(404).json({ message: "Return not found" });
+    }
 
-  if (record.status === "cancelled") {
-    return res.status(409).json({ message: "Return is already cancelled" });
-  }
+    if (record.status === "cancelled") {
+      return res.status(409).json({ message: "Return is already cancelled" });
+    }
 
-  if (!CANCELLABLE_RETURN_STATUSES.has(record.status) || RETURN_TERMINAL_STATUSES.has(record.status)) {
-    return res.status(409).json({
-      message: `Return cannot be cancelled from ${record.status} status`,
+    if (!CANCELLABLE_RETURN_STATUSES.has(record.status) || RETURN_TERMINAL_STATUSES.has(record.status)) {
+      return res.status(409).json({
+        message: `Return cannot be cancelled from ${record.status} status`,
+      });
+    }
+
+    const userId = req.user_id || "USR000001";
+    const linkedRma = activeLinkedRma(record);
+    if (String(linkedRma?.status || "").toLowerCase() === "completed") {
+      return res.status(409).json({ message: "Return cannot be cancelled after the linked RMA is completed" });
+    }
+
+    let updated = await updateReturnStatus({
+      tenantId: req.tenant_id,
+      warehouseId,
+      returnId: req.params.returnId,
+      status: "cancelled",
+      userId,
+      cancellationReason: validation.cancellationReason,
+      cancellationReasonCode: validation.cancellationReasonCode,
+      auditContext: auditContext(req),
     });
+
+    updated = await getPostgresReturn({ tenantId: req.tenant_id, warehouseId, returnId: req.params.returnId }) || updated;
+
+    return res.json({
+      success: true,
+      message: "Return cancelled successfully",
+      document: toReturnSummary(updated, req.tenant_id),
+    });
+  } catch (error) {
+    return next(error);
   }
-
-  const userId = req.user_id || "USR000001";
-  const now = new Date().toISOString();
-
-  const updated = updateReturn(req.tenant_id, req.params.returnId, (current) => ({
-    ...current,
-    status: "cancelled",
-    cancellation_reason_code: validation.cancellationReasonCode,
-    cancellation_reason: validation.cancellationReason,
-    cancelled_by: userId,
-    cancelled_at: now,
-    updated_at: now,
-    tenant_id: req.tenant_id,
-  }));
-
-  recordStatusTransitionAudit({
-    tenant_id: req.tenant_id,
-    user_id: userId,
-    entity_type: "return",
-    entity_id: record.return_id,
-    from_status: record.status,
-    to_status: "cancelled",
-    action: "cancel",
-  });
-
-  return res.json({
-    success: true,
-    message: "Return cancelled successfully",
-    document: toReturnSummary(updated, req.tenant_id),
-  });
 });
 
-router.patch("/:returnId/transition", (req, res) => {
+router.patch("/:returnId/transition", async (req, res, next) => {
   const action = String(req.body?.action || "").trim();
   if (!action) {
     return res.status(400).json({ message: "action is required" });
@@ -246,118 +301,79 @@ router.patch("/:returnId/transition", (req, res) => {
     return res.status(400).json({ message: `Invalid action: ${action}` });
   }
 
-  const record = getReturn(req.tenant_id, req.params.returnId);
-  if (!record) {
-    return res.status(404).json({ message: "Return not found" });
-  }
+  try {
+    const warehouseId = req.headers["x-warehouse-id"] || req.warehouse_id || null;
+    const record = await getPostgresReturn({ tenantId: req.tenant_id, warehouseId, returnId: req.params.returnId });
+    if (!record) {
+      return res.status(404).json({ message: "Return not found" });
+    }
 
-  if (record.status !== transition.from) {
-    return res.status(409).json({
-      message: `Cannot ${action} return from ${record.status} status`,
+    if (record.status !== transition.from) {
+      return res.status(409).json({
+        message: `Cannot ${action} return from ${record.status} status`,
+      });
+    }
+
+    if (action === "confirm") {
+      const linkedRma = activeLinkedRma(record);
+      if (!linkedRma) {
+        return res.status(409).json({ message: "Return must have a linked RMA before closing" });
+      }
+      if (String(linkedRma.status || "").toLowerCase() !== "completed") {
+        return res.status(409).json({ message: "Return can only be closed after the linked RMA is completed" });
+      }
+    }
+
+    const userId = req.user_id || "USR000001";
+    const updated = await updateReturnStatus({
+      tenantId: req.tenant_id,
+      warehouseId,
+      returnId: req.params.returnId,
+      status: transition.to,
+      userId,
+      auditContext: auditContext(req),
     });
+
+    return res.json({
+      success: true,
+      message: action === "confirm" ? "Return closed successfully" : `Return ${action}ed successfully`,
+      document: toReturnSummary(updated, req.tenant_id),
+    });
+  } catch (error) {
+    return next(error);
   }
-
-  const userId = req.user_id || "USR000001";
-  const now = new Date().toISOString();
-
-  const updated = updateReturn(req.tenant_id, req.params.returnId, (current) => ({
-    ...current,
-    status: transition.to,
-    updated_at: now,
-  }));
-
-  recordStatusTransitionAudit({
-    tenant_id: req.tenant_id,
-    user_id: userId,
-    entity_type: "return",
-    entity_id: record.return_id,
-    from_status: record.status,
-    to_status: transition.to,
-    action,
-  });
-
-  return res.json({
-    success: true,
-    message: `Return ${action}ed successfully`,
-    document: toReturnSummary(updated, req.tenant_id),
-  });
 });
 
 
-router.post("/:returnId/rma", (req, res) => {
+router.post("/:returnId/rma", async (req, res, next) => {
   if (!canCreateRma(req.role_id)) {
     return res.status(403).json({ message: "You do not have permission to create RMAs" });
   }
 
-  const returnRecord = getReturn(req.tenant_id, req.params.returnId);
-  if (!returnRecord) {
-    return res.status(404).json({ message: "Return not found" });
-  }
-
-  if (returnRecord.status === "cancelled") {
-    return res.status(409).json({ message: "Cannot create RMA for a cancelled return" });
-  }
-
-  if (["received", "closed"].includes(returnRecord.status)) {
-    return res.status(409).json({ message: `Cannot create RMA for return in ${returnRecord.status} status` });
-  }
-
-  const existingActiveRma = listRmas(req.tenant_id).find(
-    (rma) => rma.return_id === returnRecord.return_id && rma.status !== "cancelled",
-  );
-  if (existingActiveRma) {
-    return res.status(409).json({ message: `Return already linked to active RMA ${existingActiveRma.rma_id}` });
-  }
-
-  const validatedItems = validateRmaItems(req.body?.items);
-  if (validatedItems.error) {
-    return res.status(400).json({ message: validatedItems.error });
-  }
-
   const userId = req.user_id || "USR000001";
-  const now = new Date().toISOString();
-
-  const creation = createRma({
-    tenantId: req.tenant_id,
-    userId,
-    returnRecord,
-    notes: String(req.body?.notes || "").trim(),
-    items: validatedItems.data,
-  });
-
-  const shouldMarkCreated = returnRecord.status !== "created";
-  const updatedReturn = updateReturn(req.tenant_id, returnRecord.return_id, (current) => ({
-    ...current,
-    status: shouldMarkCreated ? "created" : current.status,
-    updated_at: now,
-  }));
-
-  if (shouldMarkCreated) {
-    recordStatusTransitionAudit({
-      tenant_id: req.tenant_id,
-      user_id: userId,
-      entity_type: "return",
-      entity_id: returnRecord.return_id,
-      from_status: returnRecord.status,
-      to_status: "created",
-      action: "create_rma",
+  const warehouseId = req.headers["x-warehouse-id"] || req.warehouse_id || null;
+  try {
+    const beforeReturn = await getPostgresReturn({ tenantId: req.tenant_id, warehouseId, returnId: req.params.returnId });
+    if (!beforeReturn) {
+      return res.status(404).json({ message: "Return not found" });
+    }
+    const rma = await createRmaForReturn({
+      tenantId: req.tenant_id,
+      warehouseId,
+      returnId: req.params.returnId,
+      userId,
+      auditContext: auditContext(req),
+      notes: String(req.body?.notes || "").trim() || `Created from Return ${req.params.returnId}`,
     });
+    const updatedReturn = await getPostgresReturn({ tenantId: req.tenant_id, warehouseId, returnId: req.params.returnId });
+
+    return res.status(201).json({
+      ...rma,
+      return: toReturnSummary(updatedReturn || beforeReturn, req.tenant_id),
+    });
+  } catch (error) {
+    return next(error);
   }
-
-  recordAuditEvent({
-    tenant_id: req.tenant_id,
-    user_id: userId,
-    entity_type: "rma",
-    entity_id: creation.rma.rma_id,
-    action: "create",
-    message: `RMA ${creation.rma.rma_id} created for return ${returnRecord.return_id}`,
-  });
-
-  return res.status(201).json({
-    ...creation.rma,
-    items: creation.items,
-    return: toReturnSummary(updatedReturn || returnRecord, req.tenant_id),
-  });
 });
 
 export default router;

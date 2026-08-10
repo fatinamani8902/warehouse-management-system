@@ -63,7 +63,10 @@ export default function SupplierSelect({
     };
   }, [tenantId, userId, roleId, warehouseId]);
 
-  const activeSuppliers = suppliers;
+  const activeSuppliers = useMemo(
+    () => suppliers.filter((supplier) => supplier.is_active ?? supplier.status === "active"),
+    [suppliers],
+  );
 
   const statusOption = loading
     ? "Loading suppliers..."
@@ -74,7 +77,7 @@ export default function SupplierSelect({
       <select
         id={id}
         className={cn(
-          "w-full border rounded px-2 py-1 h-9 bg-muted/40",
+          "w-full border rounded px-2 py-1 h-10 bg-muted/40",
           hasError && "border-destructive",
           className,
         )}
@@ -88,7 +91,7 @@ export default function SupplierSelect({
   return (
     <select
       id={id}
-      className={cn("w-full border rounded px-2 py-1 h-9 bg-white", hasError && "border-destructive", className)}
+      className={cn("w-full border rounded px-2 py-1 h-10 bg-white", hasError && "border-destructive", className)}
       value={value || ""}
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}

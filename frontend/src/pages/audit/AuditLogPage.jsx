@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ShieldAlert, Download, X, FileSearch, ArrowLeft, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { toSessionContext, fetchAuditOptions, fetchAuditLogs } from "@/services/api";
+import { formatDate, formatDateTime } from "@/utils/dateTimeFormatter";
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
 const ACCENT       = "#3b5bdb";
@@ -14,11 +15,11 @@ const T_SECONDARY  = "#374151";
 const T_LABEL      = "#6b7280";
 const T_MUTED      = "#9ca3af";
 
-const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", border: "none" };
-const btnNeutral = { ...btnBase, height: 32, padding: "0 12px", borderRadius: 7, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
-const btnOutline = { ...btnBase, height: 30, padding: "0 10px", borderRadius: 6, fontSize: 13, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", border: "none" };
+const btnNeutral = { ...btnBase, height: 40, padding: "0 12px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnOutline = { ...btnBase, height: 30, padding: "0 10px", borderRadius: 6, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
 const cardStyle  = { background: "#fff", borderRadius: 12, border: "0.5px solid #e8ebf8", overflow: "hidden", boxShadow: "0 2px 10px rgba(59,91,219,.07)" };
-const thStyle    = { padding: "9px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap", background: "#fafbff" };
+const thStyle    = { padding: "9px 16px", textAlign: "left", fontSize: 12, fontWeight: 600, lineHeight: "16px", letterSpacing: "0.06em", textTransform: "uppercase", color: T_LABEL, borderBottom: "0.5px solid #eef0fc", whiteSpace: "nowrap", background: "#fafbff" };
 
 const PAGE_SIZE = 20;
 
@@ -58,18 +59,6 @@ function resolveUserIdsFromSearch(searchTerm) {
   if (!searchTerm) return [];
   const q = searchTerm.toLowerCase();
   return Object.entries(USER_NAMES).filter(([, name]) => name.toLowerCase().includes(q)).map(([id]) => id);
-}
-
-function formatDateTime(ts) {
-  if (!ts) return "—";
-  try { return new Date(ts).toLocaleString("en-MY", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
-  catch { return ts; }
-}
-
-function formatDateTimeFull(ts) {
-  if (!ts) return "—";
-  try { return new Date(ts).toLocaleString("en-MY", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
-  catch { return ts; }
 }
 
 function clientFilter(logs, search) {
@@ -126,7 +115,7 @@ function UserAvatar({ userId }) {
 
 function SectionLabel({ children }) {
   return (
-    <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: T_LABEL, marginBottom: 8, paddingBottom: 6, borderBottom: "0.5px solid #eef0fc" }}>
+    <p style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", letterSpacing: "0.08em", textTransform: "uppercase", color: T_LABEL, marginBottom: 8, paddingBottom: 6, borderBottom: "0.5px solid #eef0fc" }}>
       {children}
     </p>
   );
@@ -150,7 +139,7 @@ function EmptyState({ hasFilters }) {
             <FileSearch size={20} style={{ color: T_MUTED }} />
           </div>
           <div style={{ textAlign: "center" }}>
-            <p style={{ fontSize: 14, fontWeight: 500, color: T_SECONDARY }}>{hasFilters ? "No events match your filters" : "No audit events yet"}</p>
+            <p style={{ fontSize: 13, fontWeight: 500, color: T_SECONDARY }}>{hasFilters ? "No events match your filters" : "No audit events yet"}</p>
             <p style={{ fontSize: 13, color: T_MUTED, marginTop: 4 }}>{hasFilters ? "Try adjusting or clearing your filters" : "Events appear here when users perform actions in the system"}</p>
           </div>
         </div>
@@ -176,7 +165,7 @@ function EntityTimeline({ entityId, entityType, allLogs, onBack }) {
           </button>
           <div style={{ width: 1, height: 14, background: "#e5e7eb" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: T_PRIMARY }}>Timeline for</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: T_PRIMARY }}>Timeline for</span>
             <code style={{ fontSize: 13, padding: "2px 8px", borderRadius: 6, background: "#fff", border: "0.5px solid #e5e7eb", color: ACCENT }}>{entityId}</code>
             <span style={{ fontSize: 13, color: T_MUTED, textTransform: "capitalize" }}>({entityType})</span>
           </div>
@@ -220,7 +209,7 @@ function EntityTimeline({ entityId, entityType, allLogs, onBack }) {
                         <UserAvatar userId={ev.user_id} />
                         <span style={{ fontSize: 13, color: T_SECONDARY }}>{resolveUserName(ev.user_id)}</span>
                         <span style={{ fontSize: 13, color: T_MUTED }}>·</span>
-                        <span style={{ fontSize: 13, color: T_MUTED }}>{formatDateTimeFull(ev.timestamp)}</span>
+                        <span style={{ fontSize: 13, color: T_MUTED }}>{formatDateTime(ev.timestamp)}</span>
                       </div>
                     </div>
                   </div>
@@ -265,7 +254,7 @@ function DetailPanel({ log, onClose, onViewTimeline }) {
         <div style={{ paddingRight: 24, borderRight: "0.5px solid #eef0fc" }}>
           <SectionLabel>Event info</SectionLabel>
           <DetailRow label="Audit ID"><code style={{ fontSize: 12, color: T_SECONDARY }}>{log.audit_id}</code></DetailRow>
-          <DetailRow label="Timestamp"><span style={{ fontSize: 13 }}>{formatDateTimeFull(log.timestamp)}</span></DetailRow>
+          <DetailRow label="Timestamp"><span style={{ fontSize: 13 }}>{formatDateTime(log.timestamp)}</span></DetailRow>
           <DetailRow label="Action"><ActionBadge action={log.action} /></DetailRow>
           <DetailRow label="Risk level"><RiskBadge risk={log.risk} /></DetailRow>
           <DetailRow label="Entity type"><span style={{ fontSize: 13, textTransform: "capitalize" }}>{log.entity_type}</span></DetailRow>
@@ -297,7 +286,7 @@ function DetailPanel({ log, onClose, onViewTimeline }) {
                 <DetailRow label="Status changed">
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <span style={{ fontSize: 13, padding: "3px 10px", borderRadius: 6, background: "#FEE2E2", color: "#991B1B", fontWeight: 500 }}>{log.from_status}</span>
-                    <span style={{ fontSize: 14, color: T_MUTED }}>→</span>
+                    <span style={{ fontSize: 13, color: T_MUTED }}>→</span>
                     <span style={{ fontSize: 13, padding: "3px 10px", borderRadius: 6, background: "#D1FAE5", color: "#065F46", fontWeight: 500 }}>{log.to_status}</span>
                   </div>
                 </DetailRow>
@@ -388,8 +377,8 @@ export default function AuditLogPage() {
     filterEntity && { label: `Entity: ${filterEntity}`,              clear: () => setFilterEntity("") },
     filterRisk   && { label: `Risk: ${filterRisk}`,                  clear: () => setFilterRisk("") },
     filterUser   && { label: `User: ${resolveUserName(filterUser)}`, clear: () => setFilterUser("") },
-    dateFrom     && { label: `From: ${dateFrom}`,                    clear: () => setDateFrom("") },
-    dateTo       && { label: `To: ${dateTo}`,                        clear: () => setDateTo("") },
+    dateFrom     && { label: `From: ${formatDate(dateFrom)}`,        clear: () => setDateFrom("") },
+    dateTo       && { label: `To: ${formatDate(dateTo)}`,            clear: () => setDateTo("") },
   ].filter(Boolean);
 
   const highRiskCount  = logs.filter((l) => l.risk === "High").length;
@@ -404,11 +393,11 @@ export default function AuditLogPage() {
       {/* Page header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>Audit Log</h1>
-          <p style={{ fontSize: 13, color: T_SECONDARY }}>Complete activity trail — restricted to superadmin and hqadmin</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, lineHeight: "30px", color: T_PRIMARY, marginBottom: 2 }}>Audit Log</h1>
+          <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>Complete activity trail — restricted to superadmin and hqadmin</p>
         </div>
         <button style={btnNeutral} onClick={() => {}}>
-          <Download size={13} /> Export
+          <Download size={16} /> Export
         </button>
       </div>
 
@@ -424,20 +413,20 @@ export default function AuditLogPage() {
           {/* Row 1 — search + dates */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
             <div style={{ position: "relative", flex: 1, maxWidth: 320 }}>
-              <Search size={13} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: T_MUTED, flexShrink: 0 }} />
+              <Search size={16} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: T_MUTED, flexShrink: 0 }} />
               <input
                 value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search name, entity ID, action…"
-                style={{ width: "100%", height: 32, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 28px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
+                style={{ width: "100%", height: 40, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 28px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff" }}
               />
-              {search && <X size={12} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: T_MUTED }} onClick={() => setSearch("")} />}
+              {search && <X size={16} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", cursor: "pointer", color: T_MUTED }} onClick={() => setSearch("")} />}
             </div>
             <span style={{ fontSize: 13, color: T_MUTED }}>From</span>
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
-              style={{ fontSize: 13, height: 32, padding: "0 10px", borderRadius: 7, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY }} />
+              style={{ fontSize: 13, height: 40, padding: "0 10px", borderRadius: 7, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY }} />
             <span style={{ fontSize: 13, color: T_MUTED }}>To</span>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
-              style={{ fontSize: 13, height: 32, padding: "0 10px", borderRadius: 7, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY }} />
+              style={{ fontSize: 13, height: 40, padding: "0 10px", borderRadius: 7, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY }} />
             <div style={{ flex: 1 }} />
             {hasFilters && (
               <button onClick={clearAll} style={{ ...btnBase, height: "auto", padding: 0, fontSize: 13, color: T_MUTED, background: "none", textDecoration: "underline" }}>
@@ -456,7 +445,7 @@ export default function AuditLogPage() {
             ].map(({ value, setValue, placeholder, width, items }) => (
               <Select key={placeholder} value={value || "all"} onValueChange={(v) => setValue(v === "all" ? "" : v)}
                 disabled={optionsLoading && placeholder !== "All risk levels"}>
-                <SelectTrigger style={{ height: 32, fontSize: 13, width, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+                <SelectTrigger style={{ height: 40, fontSize: 13, width, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
                   <SelectValue placeholder={placeholder} />
                 </SelectTrigger>
                 <SelectContent>

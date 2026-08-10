@@ -4,21 +4,27 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createOrder, fetchCustomers, toSessionContext } from "@/services/api";
 import { useAuth } from "@/contexts/AuthContext";
+import CustomerCombobox from "@/components/shared/CustomerCombobox";
 
-export default function CreateOrder({ onCreated, onCancel }) {
+export default function CreateOrder({ session: sessionProp, onCreated, onCancel }) {
   const auth = useAuth();
-  const session = useMemo(() => toSessionContext(auth), [auth]);
+  // Use passed session if available, fallback to own useAuth
+  const ownSession = useMemo(() => toSessionContext(auth), [auth]);
+  const session    = sessionProp || ownSession;
 
-  const [customers, setCustomers] = useState([]);
+  const [customers, setCustomers]               = useState([]);
   const [customersLoading, setCustomersLoading] = useState(true);
-
-  const [customerId, setCustomerId] = useState("");
-  const [customerName, setCustomerName] = useState("");
-  const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [customerId, setCustomerId]             = useState("");
+  const [customerName, setCustomerName]         = useState("");
+  const [notes, setNotes]                       = useState("");
+  const [shipBy, setShipBy]                     = useState("");
+  const [loading, setLoading]                   = useState(false);
+  const [error, setError]                       = useState("");
 
   useEffect(() => {
+    // Wait for tenant_id before fetching
+    if (!session?.tenant_id) return;
+
     const loadCustomers = async () => {
       try {
         setCustomersLoading(true);
@@ -31,13 +37,11 @@ export default function CreateOrder({ onCreated, onCancel }) {
       }
     };
     loadCustomers();
-  }, [session]);
+  }, [session?.tenant_id]);
 
-  const handleCustomerChange = (e) => {
-    const selectedId = e.target.value;
-    setCustomerId(selectedId);
-    const found = customers.find((c) => c.customer_id === selectedId);
-    setCustomerName(found?.customer_name || "");
+  const handleCustomerChange = (id, name) => {
+    setCustomerId(id);
+    setCustomerName(name);
     setError("");
   };
 
@@ -55,14 +59,14 @@ export default function CreateOrder({ onCreated, onCancel }) {
 
       const response = await createOrder(session, {
         customer_name: customerName.trim(),
-        customer_id: customerId || null,
-        notes: notes?.trim() || "",
-        lines: [],
+        customer_id:   customerId || null,
+        notes:         notes?.trim() || "",
+        ship_by:       shipBy ? new Date(shipBy).toISOString() : null,
+        lines:         [],
       });
 
       const order = response?.data;
       if (!order) throw new Error("Invalid response from server");
-
       onCreated(order);
     } catch (err) {
       console.error("Create order failed:", err);
@@ -72,41 +76,46 @@ export default function CreateOrder({ onCreated, onCancel }) {
     }
   };
 
+  const minDate = new Date().toISOString().split("T")[0];
+
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
 
+      {/* Customer */}
       <div className="space-y-1.5">
         <Label>Customer <span className="text-destructive">*</span></Label>
-        {customersLoading ? (
-          <select className="w-full border rounded px-2 py-1 h-9 bg-muted/40" disabled>
-            <option>Loading customers...</option>
-          </select>
-        ) : customers.length > 0 ? (
-          <select
-            className="w-full border rounded px-2 py-1 h-9 bg-white"
-            value={customerId}
-            onChange={handleCustomerChange}
-            disabled={loading}
-          >
-            <option value="">Select customer</option>
-            {customers.map((c) => (
-              <option key={c.customer_id} value={c.customer_id}>
-                {c.customer_name}{c.contact ? ` — ${c.contact}` : ""}
-              </option>
-            ))}
-          </select>
-        ) : (
-          // Fallback — kalau tiada customers dalam Master Data
-          <input
-            className="w-full border rounded px-2 py-1 h-9"
-            placeholder="Enter customer name"
-            value={customerName}
-            onChange={(e) => { setCustomerName(e.target.value); setError(""); }}
-            disabled={loading}
-          />
+        <CustomerCombobox
+          customers={customers}
+          loading={customersLoading}
+          value={customerId}
+          onChange={handleCustomerChange}
+          disabled={loading}
+          error={error === "Customer is required" ? error : undefined}
+        />
+      </div>
+
+      {/* Required Ship By Date */}
+      <div className="space-y-1.5">
+        <Label>
+          Required Ship By Date
+          <span className="text-muted-foreground text-xs ml-1">(optional)</span>
+        </Label>
+        <input
+          type="date"
+          className="w-full border rounded px-2 py-1 h-10 text-[13px]"
+          min={minDate}
+          value={shipBy}
+          onChange={(e) => setShipBy(e.target.value)}
+          disabled={loading}
+        />
+        {shipBy && (
+          <p className="text-xs text-muted-foreground">
+            Shipment will be marked as overdue if not dispatched by this date.
+          </p>
         )}
       </div>
 
+      {/* Notes */}
       <div className="space-y-1.5">
         <Label>Notes</Label>
         <Textarea
@@ -118,7 +127,9 @@ export default function CreateOrder({ onCreated, onCancel }) {
         />
       </div>
 
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && error !== "Customer is required" && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>

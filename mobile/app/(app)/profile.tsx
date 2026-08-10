@@ -4,20 +4,31 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  Platform,
+  ScrollView,
   Modal,
   StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/stores/authStore";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
 
-interface ConfirmModalProps {
-  visible: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}
+const C = {
+  bg:          "#f4f6fb",
+  card:        "#ffffff",
+  accent:      "#3b5bdb",
+  accentLight: "#eef2ff",
+  border:      "#e8eaf0",
+  t1:          "#111827",
+  t2:          "#374151",
+  t3:          "#6b7280",
+  t4:          "#9ca3af",
+  danger:      "#dc2626",
+  dangerBg:    "#fee2e2",
+  dangerBdr:   "#fca5a5",
+};
 
-function ConfirmModal({ visible, onConfirm, onCancel }: ConfirmModalProps) {
+function ConfirmModal({ visible, onConfirm, onCancel }) {
   return (
     <Modal transparent animationType="fade" visible={visible}>
       <View style={styles.overlay}>
@@ -40,15 +51,15 @@ function ConfirmModal({ visible, onConfirm, onCancel }: ConfirmModalProps) {
   );
 }
 
-interface InfoRowProps {
-  label: string;
-  value?: string;
-}
-
-function InfoRow({ label, value }: InfoRowProps) {
+function InfoRow({ icon, label, value }) {
   return (
     <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}</Text>
+      <View style={styles.infoLeft}>
+        <View style={styles.iconBox}>
+          <Ionicons name={icon} size={15} color={C.accent} />
+        </View>
+        <Text style={styles.infoLabel}>{label}</Text>
+      </View>
       <Text style={styles.infoValue}>{value || "—"}</Text>
     </View>
   );
@@ -56,7 +67,8 @@ function InfoRow({ label, value }: InfoRowProps) {
 
 export default function ProfileScreen() {
   const { user, logout } = useAuthStore();
-  const router = useRouter();
+  const router           = useRouter();
+  const insets           = useSafeAreaInsets();
   const [showModal, setShowModal] = useState(false);
 
   const handleLogout = async () => {
@@ -68,41 +80,56 @@ export default function ProfileScreen() {
   const initials    = displayName.slice(0, 2).toUpperCase();
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoRow}>
-          <View style={styles.logoBox}>
-            <Text style={styles.logoLetter}>W</Text>
+        <TouchableOpacity onPress={() => router.push("/(app)")} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color={C.accent} />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>My Profile</Text>
+          <Text style={styles.headerSub}>Account details and preferences</Text>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scroll}>
+
+        {/* Avatar card */}
+        <View style={styles.avatarCard}>
+          <View style={styles.avatarRing}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initials}</Text>
+            </View>
           </View>
-          <Text style={styles.logoText}>WMS Portal</Text>
+          <Text style={styles.userName}>{displayName}</Text>
+          <Text style={styles.userEmail}>{user?.email || ""}</Text>
+          <View style={styles.roleBadge}>
+            <Ionicons name="shield-checkmark-outline" size={12} color={C.accent} />
+            <Text style={styles.roleBadgeText}>{user?.role_name || user?.role_id || "—"}</Text>
+          </View>
         </View>
-        <Text style={styles.headerTitle}>My Profile</Text>
-      </View>
 
-      {/* Avatar */}
-      <View style={styles.avatarSection}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initials}</Text>
+        {/* Info card */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account Information</Text>
+          <View style={styles.card}>
+            <InfoRow icon="finger-print-outline"  label="User ID"   value={user?.user_id} />
+            <InfoRow icon="business-outline"       label="Tenant"    value={user?.tenant_id} />
+            <InfoRow icon="location-outline"       label="Warehouse" value={user?.warehouse_name || user?.warehouse_id} />
+          </View>
         </View>
-        <Text style={styles.userName}>{displayName}</Text>
-        <Text style={styles.userEmail}>{user?.email || ""}</Text>
-      </View>
 
-      {/* Info */}
-      <View style={styles.card}>
-        <InfoRow label="User ID"   value={user?.user_id} />
-        <InfoRow label="Role"      value={user?.role_id} />
-        <InfoRow label="Tenant"    value={user?.tenant_id} />
-        <InfoRow label="Warehouse" value={user?.warehouse_name || user?.warehouse_id} />
-      </View>
+        {/* Sign out */}
+        <View style={styles.section}>
+          <TouchableOpacity style={styles.signOutBtn} onPress={() => setShowModal(true)}>
+            <Ionicons name="log-out-outline" size={18} color={C.danger} />
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
 
-      {/* Sign out */}
-      <TouchableOpacity style={styles.signOutBtn} onPress={() => setShowModal(true)}>
-        <Text style={styles.signOutText}>Sign Out</Text>
-      </TouchableOpacity>
+      </ScrollView>
 
       <ConfirmModal
         visible={showModal}
@@ -114,41 +141,102 @@ export default function ProfileScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f1f5f9" },
+  root:   { flex: 1, backgroundColor: C.bg },
+  scroll: { paddingBottom: 40 },
 
+  // Header
   header: {
-    backgroundColor: "#0f172a",
-    paddingTop: Platform.OS === "ios" ? 56 : 36,
-    paddingHorizontal: 22,
-    paddingBottom: 24,
+    backgroundColor: C.card,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
   },
-  logoRow:    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
-  logoBox:    { width: 30, height: 30, borderRadius: 8, backgroundColor: "#3b82f6", alignItems: "center", justifyContent: "center" },
-  logoLetter: { fontSize: 15, fontWeight: "700", color: "#fff" },
-  logoText:   { fontSize: 15, fontWeight: "700", color: "#fff" },
-  headerTitle:{ fontSize: 22, fontWeight: "800", color: "#fff" },
+  backBtn:    { marginRight: 4 },
+  headerTitle:{ fontSize: 20, fontWeight: "700", color: C.t1 },
+  headerSub:  { fontSize: 12, color: C.t3, marginTop: 2 },
 
-  avatarSection: { alignItems: "center", paddingVertical: 28 },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#1e40af", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "#3b82f6", marginBottom: 12 },
-  avatarText: { fontSize: 26, fontWeight: "800", color: "#fff" },
-  userName:   { fontSize: 18, fontWeight: "700", color: "#0f172a", marginBottom: 2 },
-  userEmail:  { fontSize: 13, color: "#64748b" },
+  // Avatar
+  avatarCard: {
+    backgroundColor: C.card,
+    marginHorizontal: 16,
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.border,
+    alignItems: "center",
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+  },
+  avatarRing: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 3,
+    borderColor: C.accentLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 14,
+    backgroundColor: C.accentLight,
+  },
+  avatar:     { width: 76, height: 76, borderRadius: 38, backgroundColor: C.accent, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 28, fontWeight: "800", color: "#fff" },
+  userName:   { fontSize: 18, fontWeight: "700", color: C.t1, marginBottom: 4 },
+  userEmail:  { fontSize: 13, color: C.t3, marginBottom: 12 },
+  roleBadge:  { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.accentLight, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 20 },
+  roleBadgeText: { fontSize: 12, fontWeight: "600", color: C.accent },
 
-  card: { backgroundColor: "#fff", borderRadius: 14, marginHorizontal: 16, paddingHorizontal: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, elevation: 1 },
-  infoRow:   { flexDirection: "row", justifyContent: "space-between", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#f1f5f9" },
-  infoLabel: { fontSize: 13, color: "#64748b", fontWeight: "600" },
-  infoValue: { fontSize: 13, color: "#0f172a", fontWeight: "700", maxWidth: "60%", textAlign: "right" },
+  // Section
+  section:      { marginHorizontal: 16, marginTop: 20 },
+  sectionTitle: { fontSize: 11, fontWeight: "700", color: C.t3, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
 
-  signOutBtn: { margin: 24, height: 48, borderRadius: 12, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" },
-  signOutText:{ fontSize: 15, fontWeight: "700", color: "#fff" },
+  // Info card
+  card: {
+    backgroundColor: C.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: "hidden",
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#f1f5f9",
+  },
+  infoLeft:  { flexDirection: "row", alignItems: "center", gap: 10 },
+  iconBox:   { width: 30, height: 30, borderRadius: 8, backgroundColor: C.accentLight, alignItems: "center", justifyContent: "center" },
+  infoLabel: { fontSize: 13, color: C.t2, fontWeight: "600" },
+  infoValue: { fontSize: 13, color: C.t1, fontWeight: "700", maxWidth: "55%", textAlign: "right" },
 
+  // Sign out
+  signOutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: C.dangerBdr,
+    backgroundColor: C.dangerBg,
+  },
+  signOutText: { fontSize: 15, fontWeight: "700", color: C.danger },
+
+  // Modal
   overlay: { flex: 1, backgroundColor: "#00000066", alignItems: "center", justifyContent: "center" },
-  modal:   { backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "82%", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 10 },
-  modalTitle:    { fontSize: 17, fontWeight: "700", color: "#0f172a", marginBottom: 8 },
-  modalMessage:  { fontSize: 14, color: "#64748b", lineHeight: 20, marginBottom: 24 },
+  modal:   { backgroundColor: "#fff", borderRadius: 16, padding: 24, width: "82%", elevation: 10 },
+  modalTitle:    { fontSize: 17, fontWeight: "700", color: C.t1, marginBottom: 8 },
+  modalMessage:  { fontSize: 14, color: C.t3, lineHeight: 20, marginBottom: 24 },
   modalActions:  { flexDirection: "row", gap: 10 },
-  cancelBtn:     { flex: 1, height: 44, borderRadius: 10, borderWidth: 1, borderColor: "#e2e8f0", alignItems: "center", justifyContent: "center" },
-  cancelBtnText: { fontSize: 14, fontWeight: "600", color: "#475569" },
-  confirmBtn:    { flex: 1, height: 44, borderRadius: 10, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" },
+  cancelBtn:     { flex: 1, height: 44, borderRadius: 10, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
+  cancelBtnText: { fontSize: 14, fontWeight: "600", color: C.t2 },
+  confirmBtn:    { flex: 1, height: 44, borderRadius: 10, backgroundColor: C.danger, alignItems: "center", justifyContent: "center" },
   confirmBtnText:{ fontSize: 14, fontWeight: "600", color: "#fff" },
 });

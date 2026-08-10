@@ -8,21 +8,18 @@ import { TabIcon } from "@/components/shared/TabIcon";
 function AppLayoutInner() {
   const { isOpen, openDrawer, closeDrawer } = useDrawer();
 
-  // Swipe right from left edge to open drawer
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_evt, gestureState) => {
-        const startX = _evt.nativeEvent.pageX;
-        return (
-          startX < 40 &&
-          gestureState.dx > 10 &&
-          Math.abs(gestureState.dy) < Math.abs(gestureState.dx)
-        );
+        const startX      = _evt.nativeEvent.pageX;
+        const isRight     = gestureState.dx > 8;
+        const isHorizontal = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5;
+        return startX < 30 && isRight && isHorizontal && !isOpen;
       },
+      onPanResponderTerminationRequest: () => true,
+      onShouldBlockNativeResponder: () => false,
       onPanResponderRelease: (_evt, gestureState) => {
-        if (gestureState.dx > 40) {
-          openDrawer();
-        }
+        if (gestureState.dx > 50) openDrawer();
       },
     })
   ).current;
@@ -32,7 +29,7 @@ function AppLayoutInner() {
       <Tabs
         screenOptions={{
           headerShown: false,
-          tabBarStyle: styles.tabBar,
+          tabBarStyle: { display: "none" },
           tabBarShowLabel: false,
         }}
       >
@@ -61,6 +58,14 @@ function AppLayoutInner() {
           }}
         />
         <Tabs.Screen
+          name="shipping/index"
+          options={{
+            tabBarIcon: ({ focused }) => (
+              <TabIcon icon="🚚" label="Shipping" focused={focused} />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="profile"
           options={{
             tabBarIcon: ({ focused }) => (
@@ -69,8 +74,6 @@ function AppLayoutInner() {
           }}
         />
       </Tabs>
-
-      {/* Drawer overlays everything */}
       <AppDrawer open={isOpen} onClose={closeDrawer} />
     </View>
   );

@@ -3,13 +3,14 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, PackageOpen, ArrowDownToLine, Warehouse,
   ClipboardList, Package, Truck, RotateCcw, QrCode, Database,
-  Users, List, FileText, Settings, ChevronLeft, ChevronRight,
+  Users, List, FileText, Settings, ChevronLeft, ChevronRight, LogOut, Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 const ADMIN_ROLES = ["superadmin"];
-const MGR_ROLES   = ["superadmin", "hqadmin", "warehousemanager"];
+const MGR_ROLES   = ["superadmin", "hqadmin", "warehousemanager", "storemanager"];
+const MASTER_VIEW_ROLES = [...MGR_ROLES, "readonly", "viewer", "auditor"];
 const ALL_ROLES   = [];
 
 const menuSections = [
@@ -52,6 +53,7 @@ const menuSections = [
     header: "Master & Configuration Data",
     items: [
       { label: "Master Data",     icon: Database, path: "/master-data", roles: MGR_ROLES },
+      { label: "Location Taxonomy", icon: Network, path: "/location-taxonomy", roles: MASTER_VIEW_ROLES },
       { label: "LOV Maintenance", icon: List,     path: "/lov",         roles: MGR_ROLES },
     ],
   },
@@ -69,22 +71,29 @@ const ROLE_LABELS = {
   superadmin:       "Super Admin",
   hqadmin:          "HQ Admin",
   warehousemanager: "WH Manager",
+  storemanager:     "Store Manager",
+  storeoperator:    "Store Operator",
   storekeeper:      "Store Keeper",
   auditor:          "Auditor",
+  readonly:         "Read Only",
 };
 
 const ROLE_COLOURS = {
   superadmin:       { bg: "#FEE2E2", color: "#991B1B" },
   hqadmin:          { bg: "#EDE9FE", color: "#5B21B6" },
   warehousemanager: { bg: "#DBEAFE", color: "#1E40AF" },
+  storemanager:     { bg: "#DBEAFE", color: "#1E40AF" },
+  storeoperator:    { bg: "#D1FAE5", color: "#065F46" },
   storekeeper:      { bg: "#D1FAE5", color: "#065F46" },
   auditor:          { bg: "#FEF9C3", color: "#854D0E" },
+  readonly:         { bg: "#F3F4F6", color: "#374151" },
 };
 
 export const AppSidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
   const location   = useLocation();
-  const { currentUser } = useAuth();
+  const auth = useAuth();
+  const { currentUser } = auth;
   const userRole   = currentUser?.role || "";
 
   const visibleSections = menuSections.map((section) => ({
@@ -124,7 +133,7 @@ export const AppSidebar = () => {
           onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.35)"; }}
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? <ChevronRight size={15} /> : <ChevronLeft size={15} />}
+          {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
       </div>
 
@@ -197,12 +206,64 @@ export const AppSidebar = () => {
         ))}
       </nav>
 
-      {/* Footer */}
-      {!collapsed && (
-        <div style={{ padding: "10px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 11, color: "rgba(255,255,255,0.22)", flexShrink: 0 }}>
-          WMS v1.0 — Mockup
-        </div>
-      )}
+      {/* Profile + Sign Out */}
+      <div style={{ padding: "8px", borderTop: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+        {!collapsed ? (
+          <div style={{ padding: "10px 10px 6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                background: ROLE_COLOURS[userRole]?.bg || "#1e293b",
+                color: ROLE_COLOURS[userRole]?.color || "#fff",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 12, fontWeight: 700,
+              }}>
+                {(currentUser?.name || "U").slice(0, 2).toUpperCase()}
+              </div>
+              <div style={{ overflow: "hidden" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {currentUser?.name || "User"}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", whiteSpace: "nowrap" }}>
+                  {ROLE_LABELS[userRole] || userRole}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={auth.signOut}
+              style={{
+                width: "100%", height: 32, borderRadius: 6, border: "none",
+                background: "rgba(239,68,68,0.12)", color: "#f87171",
+                fontSize: 12, fontWeight: 600, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.22)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; }}
+            >
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={auth.signOut}
+            title="Sign Out"
+            style={{
+              width: "100%", height: 36, borderRadius: 6, border: "none",
+              background: "transparent", color: "rgba(239,68,68,0.7)",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; e.currentTarget.style.color = "#f87171"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "rgba(239,68,68,0.7)"; }}
+          >
+            <LogOut size={16} />
+          </button>
+        )}
+        {!collapsed && (
+          <div style={{ padding: "6px 10px 2px", fontSize: 10, color: "rgba(255,255,255,0.18)" }}>
+            WMS v1.0 — Mockup
+          </div>
+        )}
+      </div>
     </aside>
   );
 };

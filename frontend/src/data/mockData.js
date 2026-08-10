@@ -23,24 +23,34 @@ const db = {
     lastLogin: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    user_id: "USR000003",
+    user_id: "USR000015",
     user_name: "Mike Operator",
     email: "mike@acme.com",
-    role_id: "storekeeper",
+    role_id: "storeoperator",
     tenant_id: "TNT000001",
     warehouse_ids: ["WH000001"],
     is_active: true,
     lastLogin: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    user_id: "USR000004",
+    user_id: "USR000016",
+    user_name: "Lisa Operator",
+    email: "lisa_op@acme.com",
+    role_id: "storeoperator",
+    tenant_id: "TNT000001",
+    warehouse_ids: ["WH000001"],
+    is_active: true,
+    lastLogin: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    user_id: "USR000006",
     user_name: "Lisa Auditor",
     email: "lisa@acme.com",
     role_id: "auditor",
     tenant_id: "TNT000001",
     warehouse_ids: ["WH000001"],
-    is_active: false,
-    lastLogin: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    is_active: true,
+    lastLogin: null,
   },
   {
     user_id: "USR000005",
@@ -1676,7 +1686,7 @@ function listAssignableOperators(tenantId, warehouseId = null) {
     db.users
       .filter((user) => user.tenant_id === tenantId)
       .filter((user) => user.is_active)
-      .filter((user) => user.role_id === "storekeeper")
+      .filter((user) => user.role_id === "storeoperator")
       .filter((user) => {
         if (!warehouseId) {
           return true;
@@ -1856,7 +1866,7 @@ function assignPutawayTask({
     return { error: "Assigned user not found for tenant" };
   }
 
-  if (assignee.role_id !== "storekeeper") {
+  if (assignee.role_id !== "storeoperator") {
     return { error: "Assigned user must be a store operator" };
   }
 
@@ -4153,73 +4163,6 @@ function addTraceEvent(entry) {
   return clone(traceEvent);
 }
 
-function listSkus(tenantId, { search = "", page = 1, pageSize = 10 } = {}) {
-  const safePage = Math.max(1, Number(page) || 1);
-  const safePageSize = Math.max(1, Number(pageSize) || 10);
-  const searchValue = normalizeSearchValue(search);
-
-  const rows = db.skus
-    .filter((item) => {
-      if (!searchValue) return true;
-      return [item.sku_id, item.description, item.uom_id].some(
-        (field) => normalizeSearchValue(field).includes(searchValue)
-      );
-    })
-    .sort((a, b) => a.sku_id.localeCompare(b.sku_id));
-
-  const total = rows.length;
-  const offset = (safePage - 1) * safePageSize;
-  const items = rows.slice(offset, offset + safePageSize);
-
-  return { items: clone(items), total, page: safePage, pageSize: safePageSize };
-}
-
-function getSkuById(skuId) {
-  return db.skus.find((item) => item.sku_id === skuId) || null;
-}
-
-function createSku({ skuId, description, uomId, epcValue }) {
-  if (!skuId || !description) {
-    return { error: "sku_id and description are required" };
-  }
-
-  const exists = db.skus.find((item) => item.sku_id === skuId);
-  if (exists) {
-    return { error: "SKU ID already exists" };
-  }
-
-  const sku = {
-    sku_id: skuId.trim().toUpperCase(),
-    description: description.trim(),
-    uom_id: uomId || "EA",
-    epc_value: epcValue || null,
-  };
-
-  db.skus.push(sku);
-  return { data: clone(sku) };
-}
-
-function updateSku(skuId, { description, uomId, epcValue }) {
-  const idx = db.skus.findIndex((item) => item.sku_id === skuId);
-  if (idx < 0) return null;
-
-  db.skus[idx] = {
-    ...db.skus[idx],
-    description: description ?? db.skus[idx].description,
-    uom_id: uomId ?? db.skus[idx].uom_id,
-    epc_value: epcValue ?? db.skus[idx].epc_value,
-  };
-
-  return clone(db.skus[idx]);
-}
-
-function deleteSku(skuId) {
-  const idx = db.skus.findIndex((item) => item.sku_id === skuId);
-  if (idx < 0) return false;
-  db.skus.splice(idx, 1);
-  return true;
-}
-
 export {
   addAuditLog,
   addCountEntry,
@@ -4301,11 +4244,6 @@ export {
   updateReturn,
   updateRma,
   updateSupplier,
-  listSkus,
-  getSkuById,
-  createSku,
-  updateSku,
-  deleteSku,
 };
 export { db };
 // ===== FRONTEND COMPATIBILITY EXPORTS =====
@@ -4432,5 +4370,5 @@ export const floorStatus = [
   { userId: "USR000002", name: "Sarah Manager", initials: "SM", task: "GRN receiving", location: "Dock 1", status: "active" },
   { userId: "USR000003", name: "Mike Operator", initials: "MC", task: "Putaway — Zone B", location: "A-01-001", status: "active" },
   { userId: "USR000006", name: "Ali Hassan", initials: "AH", task: "Picking — ORD4521", location: "Pick Area B", status: "active" },
-  { userId: "USR000007", name: "Nadia Lim", initials: "NL", task: "Idle", location: "—", status: "idle" },
+  { userId: "USR000007", name: "Nadia Lim", initials: "NL", task: "Idle", location: "-", status: "idle" },
 ];

@@ -23,8 +23,8 @@ export const ScanEnabledField = ({ value, onChange, onScan, placeholder = "Scan 
             <Radio className="h-3.5 w-3.5"/>
           </button>
         </div>
-        <Input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-9 text-sm flex-1" onKeyDown={e => e.key === "Enter" && handleSubmit()}/>
-        <Button size="sm" onClick={handleSubmit} className="h-9">Scan</Button>
+        <Input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-10 text-[13px] flex-1" onKeyDown={e => e.key === "Enter" && handleSubmit()}/>
+        <Button size="sm" onClick={handleSubmit} className="h-10">Scan</Button>
       </div>
       {mode !== "manual" && (<p className="text-[11px] text-muted-foreground">
           {mode === "qr" ? "📷 Camera / handheld QR scanner active (simulated)" : "📡 RFID reader listening (simulated)"}

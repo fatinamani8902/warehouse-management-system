@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { GlossaryRegistry, GlossaryTerm } from "@/components/shared/GlossaryTooltip";
 import { Search, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
@@ -16,9 +17,9 @@ const T_PRIMARY  = "#111827";
 const T_SECONDARY = "#374151";
 const T_LABEL    = "#6b7280";
 
-const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 6, fontFamily: "inherit", border: "none" };
-const btnPrimary = { ...btnBase, height: 34, padding: "0 16px", borderRadius: 7, fontSize: 14, background: ACCENT, color: "#fff" };
-const btnNeutral = { ...btnBase, height: 34, padding: "0 14px", borderRadius: 7, fontSize: 14, border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
+const btnBase    = { cursor: "pointer", whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", border: "none" };
+const btnPrimary = { ...btnBase, height: 40, padding: "0 16px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", background: ACCENT, color: "#fff" };
+const btnNeutral = { ...btnBase, height: 40, padding: "0 14px", borderRadius: 7, fontSize: 13, fontWeight: 500, lineHeight: "20px", border: "0.5px solid #d1d5db", background: "#fff", color: T_PRIMARY };
 
 const cardStyle = {
   background: "#fff", borderRadius: 12,
@@ -177,15 +178,16 @@ const TracePage = () => {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
+    <GlossaryRegistry>
     <AppLayout>
       <Breadcrumbs items={[{ label: "Trace (QR/RF)" }]} />
 
       {/* Page header */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 500, color: T_PRIMARY, marginBottom: 2 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700, lineHeight: "30px", color: T_PRIMARY, marginBottom: 2 }}>
           {trace.isFiltered ? `Tracking: ${trace.filter?.value || "Item"}` : "Trace & Visibility"}
         </h1>
-        <p style={{ fontSize: 13, color: T_SECONDARY }}>
+        <p style={{ fontSize: 13, fontWeight: 400, lineHeight: "20px", color: T_SECONDARY }}>
           {trace.isFiltered
             ? `Showing full journey for ${toFilterLabel(trace.filter?.type)}: ${trace.filter?.value} — from receiving to shipping.`
             : "Track any item's movement within the warehouse. Search by SKU, GRN, location, or scan reference."}
@@ -194,7 +196,7 @@ const TracePage = () => {
 
       {/* No tenant */}
       {!session.tenant_id && (
-        <div style={{ ...cardStyle, padding: "32px 16px", textAlign: "center", fontSize: 14, color: T_SECONDARY }}>
+        <div style={{ ...cardStyle, padding: "32px 16px", textAlign: "center", fontSize: 13, color: T_SECONDARY }}>
           Select a tenant before using the Trace module.
         </div>
       )}
@@ -212,7 +214,7 @@ const TracePage = () => {
                   <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
                     <Search style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", width: 13, height: 13, color: "#6b7280", pointerEvents: "none" }} />
                     <input
-                      style={{ width: "100%", height: 34, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 32px 0 30px", fontSize: 14, color: T_PRIMARY, outline: "none", background: "#fff", boxSizing: "border-box" }}
+                      style={{ width: "100%", height: 40, border: "0.5px solid #d1d5db", borderRadius: 7, padding: "0 32px 0 30px", fontSize: 13, color: T_PRIMARY, outline: "none", background: "#fff", boxSizing: "border-box" }}
                       placeholder="e.g. SKU000001, GRN000143, A-01-001, PUT000210…"
                       value={searchValue}
                       onChange={(e) => setSearchValue(e.target.value)}
@@ -231,7 +233,7 @@ const TracePage = () => {
                   {/* Event type filter — global mode only */}
                   {!trace.isFiltered && (
                     <Select value={eventTypeFilter || "all"} onValueChange={(v) => setEventTypeFilter(v === "all" ? "" : v)}>
-                      <SelectTrigger style={{ height: 34, width: 160, fontSize: 14, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
+                      <SelectTrigger style={{ height: 40, width: 160, fontSize: 13, border: "0.5px solid #d1d5db", borderRadius: 7, background: "#fff", color: T_PRIMARY }}>
                         <SelectValue placeholder="All Events" />
                       </SelectTrigger>
                       <SelectContent>
@@ -254,8 +256,8 @@ const TracePage = () => {
                   )}
                 </div>
 
-                <p style={{ fontSize: 12, color: T_LABEL, marginTop: 8 }}>
-                  Tip: System auto-detects type — SKU, GRN, PUT, ASN, RMA, ADJ, or location code.
+                <p style={{ fontSize: 12, color: T_LABEL, marginTop: 8, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 4px" }}>
+                  Tip: System auto-detects type — SKU, <GlossaryTerm term="GRN" />, PUT, <GlossaryTerm term="ASN" />, <GlossaryTerm term="RMA" />, ADJ, or location code.
                 </p>
               </form>
             </div>
@@ -283,7 +285,7 @@ const TracePage = () => {
                       fontFamily: "inherit",
                     }}
                   >
-                    <p style={{ fontSize: 11, fontWeight: 700, color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</p>
+                    <p style={{ fontSize: 12, fontWeight: 500, lineHeight: "16px", color: T_LABEL, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</p>
                     <p style={{ fontSize: 26, fontWeight: 700, color, lineHeight: 1, marginBottom: 4 }}>{eventStats[key] || 0}</p>
                     <p style={{ fontSize: 12, color: T_LABEL }}>events</p>
                   </button>
@@ -317,6 +319,7 @@ const TracePage = () => {
         </div>
       )}
     </AppLayout>
+    </GlossaryRegistry>
   );
 };
 

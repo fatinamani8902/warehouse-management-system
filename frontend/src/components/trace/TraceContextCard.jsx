@@ -1,14 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-function formatDateTime(value) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "-";
-  return parsed.toLocaleString("en-GB", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
-}
+import { formatDateTime } from "@/utils/dateTimeFormatter";
 
 const FILTER_TYPE_LABELS = {
   sku: "SKU", epc: "EPC Tag", grn: "GRN", do: "Delivery Order",
@@ -32,7 +23,7 @@ function StatusBadge({ status }) {
   return (
     <span style={{
       display: "inline-flex", alignItems: "center",
-      fontSize: 12, fontWeight: 500, padding: "3px 10px", borderRadius: 20,
+      fontSize: 12, fontWeight: 500, lineHeight: "16px", padding: "3px 10px", borderRadius: 20,
       background: cfg.bg, color: cfg.color, whiteSpace: "nowrap",
     }}>
       {cfg.label}
@@ -49,7 +40,7 @@ export const TraceContextCard = ({ filter, context }) => {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm flex items-center gap-2">
+        <CardTitle className="text-[13px] flex items-center gap-2">
           Item Summary
           <span className="text-xs font-normal text-muted-foreground">
             — {FILTER_TYPE_LABELS[filter?.type] || "Reference"}: <span className="font-mono">{filter?.value || "-"}</span>
@@ -59,12 +50,12 @@ export const TraceContextCard = ({ filter, context }) => {
       <CardContent className="space-y-4">
         {/* Info grid */}
         <div className="rounded-md border bg-muted/20 px-4 py-3">
-          <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-x-8 gap-y-3 text-[13px] md:grid-cols-4">
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Current Status</p>
               {safeContext.lastStatus
                 ? <StatusBadge status={safeContext.lastStatus} />
-                : <p className="text-muted-foreground text-sm">-</p>}
+                : <p className="text-muted-foreground text-[13px]">-</p>}
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Last Known Location</p>
@@ -76,11 +67,11 @@ export const TraceContextCard = ({ filter, context }) => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Last Activity</p>
-              <p className="text-sm">{formatDateTime(safeContext.lastEventAt)}</p>
+              <p className="text-[13px]">{formatDateTime(safeContext.lastEventAt)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Warehouse</p>
-              <p className="text-sm">{safeContext.warehouseName || "-"}</p>
+              <p className="text-[13px]">{safeContext.warehouseName || "-"}</p>
             </div>
           </div>
         </div>
@@ -89,7 +80,7 @@ export const TraceContextCard = ({ filter, context }) => {
         <div>
           <p className="text-xs text-muted-foreground mb-3">Warehouse Journey</p>
           {String(safeContext.lastStatus || "").toLowerCase() === "returned" ? (
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-[13px]">
               <span style={{
                 fontSize: 12, fontWeight: 500, padding: "3px 12px", borderRadius: 20,
                 background: "#FEE2E2", color: "#991B1B", border: "1px solid #FECACA",

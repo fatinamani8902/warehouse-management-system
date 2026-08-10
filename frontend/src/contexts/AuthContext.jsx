@@ -20,6 +20,19 @@ function loadFromStorage() {
       localStorage.removeItem(STORAGE_KEY);
       return emptyState;
     }
+    if (parsed.currentUser?.email) {
+      const refreshedUser = users.find((user) => user.email === parsed.currentUser.email);
+      if (refreshedUser) {
+        return {
+          ...parsed,
+          currentUser: refreshedUser,
+          currentWarehouseId: parsed.currentWarehouseId || refreshedUser.warehouse_ids?.[0] || null,
+        };
+      }
+    }
+    if (!parsed.currentWarehouseId && Array.isArray(parsed.currentUser?.warehouse_ids) && parsed.currentUser.warehouse_ids.length > 0) {
+      return { ...parsed, currentWarehouseId: parsed.currentUser.warehouse_ids[0] };
+    }
     return parsed;
   } catch {
     return emptyState;
@@ -50,7 +63,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: true,
         currentUser: user,
         currentTenantId: user.tenants.length === 1 ? user.tenants[0] : null,
-        currentWarehouseId: null,
+        currentWarehouseId: user.warehouse_ids?.[0] || null,
         tokenExpiry: new Date(Date.now() + 8 * 3600000).toISOString(),
       });
       return true;

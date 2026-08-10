@@ -6,7 +6,7 @@ export const Breadcrumbs = ({ items }) => {
         label: s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, " "),
         path: undefined,
     }));
-    return (<nav className="flex items-center gap-1 text-sm text-muted-foreground mb-4">
+    return (<nav className="flex items-center gap-1 text-[13px] text-muted-foreground mb-4">
       <Link to="/dashboard" className="hover:text-foreground"><Home className="h-3.5 w-3.5"/></Link>
       {segments.map((item, i) => (<span key={i} className="flex items-center gap-1">
           <ChevronRight className="h-3 w-3"/>

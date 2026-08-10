@@ -7,12 +7,15 @@ import {
 import { useRouter } from "expo-router";
 import { useAuthStore } from "@/stores/authStore";
 import { apiClient } from "@/services/api";
+import * as SecureStore from "expo-secure-store";
+import { MOBILE_DEBUG_ENABLED, mobileDebug } from "@/utils/debug";
 
 const DEMO_ACCOUNTS = [
   { initials: "JA", name: "John Admin",    email: "john@acme.com",    role: "superadmin",       roleLabel: "Super Admin",  color: "#fee2e2", textColor: "#991b1b" },
   { initials: "HA", name: "HQ Admin",      email: "hq@acme.com",      role: "hqadmin",          roleLabel: "HQ Admin",     color: "#fef9c3", textColor: "#854d0e" },
   { initials: "SM", name: "Sarah Manager", email: "sarah@acme.com",   role: "storemanager",     roleLabel: "WH Manager",   color: "#dbeafe", textColor: "#1e40af" },
-  { initials: "MO", name: "Mike Operator", email: "mike@acme.com",    role: "storekeeper",      roleLabel: "Store Keeper", color: "#dcfce7", textColor: "#166534" },
+  { initials: "MO", name: "Mike Operator", email: "mike@acme.com",    role: "warehouseoperator", roleLabel: "Warehouse Operator", color: "#dcfce7", textColor: "#166534" },
+  { initials: "LO", name: "Lisa Operator", email: "lisa_op@acme.com", role: "storeoperator", roleLabel: "Store Operator", color: "#d1fae5", textColor: "#065f46" },
   { initials: "LA", name: "Lisa Auditor",  email: "lisa@acme.com",    role: "auditor",          roleLabel: "Auditor",      color: "#fef9c3", textColor: "#854d0e" },
 ];
 
@@ -45,7 +48,31 @@ export default function LoginScreen() {
       );
 
       const { user, session } = res.data;
+      mobileDebug("[Mobile login] API response", {
+        user_id: user?.user_id,
+        role_id: user?.role_id,
+        tenant_id: user?.tenant_id,
+        warehouse_id: user?.warehouse_id || null,
+      });
       await setAuth(user, session);
+      const storedUserJson = MOBILE_DEBUG_ENABLED ? await SecureStore.getItemAsync("wms_user") : null;
+      const storedUser = storedUserJson ? JSON.parse(storedUserJson) : null;
+      const inMemoryUser = useAuthStore.getState().user;
+      mobileDebug("[Mobile login] post-save identity", {
+        storageKey: "wms_user",
+        storedUser: storedUser ? {
+          user_id: storedUser.user_id,
+          role_id: storedUser.role_id,
+          tenant_id: storedUser.tenant_id,
+          warehouse_id: storedUser.warehouse_id || null,
+        } : null,
+        inMemoryUser: inMemoryUser ? {
+          user_id: inMemoryUser.user_id,
+          role_id: inMemoryUser.role_id,
+          tenant_id: inMemoryUser.tenant_id,
+          warehouse_id: inMemoryUser.warehouse_id || null,
+        } : null,
+      });
       router.replace("/(auth)/select-warehouse");
     } catch (e: any) {
       setError(e?.response?.data?.message || "Login failed. Check your credentials.");
@@ -138,7 +165,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <Text style={styles.noAccount}>
-            Don't have an account?{" "}
+            Don&apos;t have an account?{" "}
             <Text style={styles.noAccountMuted}>Contact your system administrator.</Text>
           </Text>
 

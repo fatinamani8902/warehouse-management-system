@@ -1,11 +1,25 @@
 import { buildList, buildEntity, buildCreate, buildUpdate, buildDelete } from "./sharedService.js";
 
+const ROLE_NAMES = {
+  superadmin:       "Super Admin",
+  hqadmin:          "HQ Admin",
+  storemanager:     "Store Manager",
+  warehousemanager: "Warehouse Manager",
+  storeoperator:    "Store Operator",
+  storekeeper:      "Store Keeper",
+  auditor:          "Auditor",
+  readonly:         "Read Only",
+};
+
 function getMe(context) {
+  const roleId = context.roles?.[0] || "";
   return {
-    userId: context.userId,
-    tenantId: context.tenantId,
-    roles: context.roles,
+    userId:      context.userId,
+    tenantId:    context.tenantId,
+    roles:       context.roles,
     permissions: context.permissions,
+    role_id:     roleId,
+    role_name:   ROLE_NAMES[roleId.toLowerCase()] || roleId,
   };
 }
 

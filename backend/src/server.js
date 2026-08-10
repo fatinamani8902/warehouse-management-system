@@ -23,4 +23,4 @@ if (isDirectRun) {
   startServer();
 }
 
-export { startServer };
+export { createApp, startServer };

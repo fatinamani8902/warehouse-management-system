@@ -12,16 +12,19 @@ const ROLE_LABELS = {
   superadmin:       { label: "Super Admin",    bg: "#FEE2E2", color: "#991B1B" },
   hqadmin:          { label: "HQ Admin",        bg: "#EDE9FE", color: "#5B21B6" },
   warehousemanager: { label: "WH Manager",      bg: "#DBEAFE", color: "#1E40AF" },
-  storekeeper:      { label: "Store Keeper",    bg: "#D1FAE5", color: "#065F46" },
+  storemanager:     { label: "WH Manager",      bg: "#DBEAFE", color: "#1E40AF" },
+  storeoperator:    { label: "Store Operator",  bg: "#D1FAE5", color: "#065F46" }, // ← gantikan storekeeper
+  storekeeper:      { label: "Store Operator",  bg: "#D1FAE5", color: "#065F46" }, // ← fallback (backward compat)
   auditor:          { label: "Auditor",         bg: "#FEF9C3", color: "#854D0E" },
 };
 
 const DEMO_ACCOUNTS = [
-  { email: "john@acme.com",   role: "superadmin" },
-  { email: "hq@acme.com",     role: "hqadmin" },
-  { email: "sarah@acme.com",  role: "warehousemanager" },
-  { email: "mike@acme.com",   role: "storekeeper" },
-  { email: "lisa@acme.com",   role: "auditor" },
+  { email: "john@acme.com",    role: "superadmin"    },
+  { email: "hq@acme.com",      role: "hqadmin"       },
+  { email: "sarah@acme.com",   role: "storemanager"  },
+  { email: "mike@acme.com",    role: "storeoperator" }, // ← ditukar dari storekeeper
+  { email: "lisa_op@acme.com", role: "storeoperator" }, // ← Lisa Operator (baru)
+  { email: "lisa@acme.com",    role: "auditor"       },
 ];
 
 const SignIn = () => {
@@ -75,21 +78,21 @@ const SignIn = () => {
               <span style={{ color: "#60A5FA" }}>Operations</span><br />
               Made Simple.
             </h1>
-            <p className="mt-4 text-slate-400 text-sm leading-relaxed max-w-xs">
+            <p className="mt-4 text-slate-400 text-[13px] leading-5 max-w-xs">
               End-to-end warehouse management — from inbound receiving to outbound shipping, all in one platform.
             </p>
           </div>
           <div className="space-y-3">
             {[
-              { icon: Package, text: "Real-time inventory tracking" },
+              { icon: Package,   text: "Real-time inventory tracking" },
               { icon: BarChart3, text: "Cycle count & adjustments" },
-              { icon: Truck, text: "Inbound to outbound workflow" },
+              { icon: Truck,     text: "Inbound to outbound workflow" },
             ].map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-3">
                 <div className="h-8 w-8 rounded-md flex items-center justify-center" style={{ background: "rgba(96,165,250,0.15)" }}>
                   <Icon className="h-4 w-4" style={{ color: "#60A5FA" }} />
                 </div>
-                <span className="text-slate-300 text-sm">{text}</span>
+                <span className="text-slate-300 text-[13px] leading-5">{text}</span>
               </div>
             ))}
           </div>
@@ -109,14 +112,14 @@ const SignIn = () => {
 
         <div className="w-full max-w-sm">
           <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-sm text-gray-500 mt-1">Sign in to your account to continue</p>
+            <h2 className="text-[22px] leading-[30px] font-bold text-gray-900">Welcome back</h2>
+            <p className="text-[13px] leading-5 text-gray-500 mt-1">Sign in to your account to continue</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email field */}
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium text-gray-700">Email</Label>
+              <Label className="text-xs font-medium text-gray-700">Email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                 <Input
@@ -132,8 +135,6 @@ const SignIn = () => {
                 )}
               </div>
 
-
-
               {/* Email not found */}
               {email.includes("@") && !detectedUser && (
                 <p className="text-xs text-red-500 px-1">No account found for this email</p>
@@ -143,7 +144,7 @@ const SignIn = () => {
             {/* Password field */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-sm font-medium text-gray-700">Password</Label>
+                <Label className="text-xs font-medium text-gray-700">Password</Label>
                 <button type="button" onClick={() => navigate("/forgot-password")} className="text-xs text-blue-600 hover:underline">
                   Forgot password?
                 </button>
@@ -181,20 +182,30 @@ const SignIn = () => {
             <div className="space-y-1.5">
               {DEMO_ACCOUNTS.map((acc) => {
                 const user = users.find((u) => u.email === acc.email);
-                const cfg = ROLE_LABELS[acc.role];
+                const cfg  = ROLE_LABELS[acc.role] || ROLE_LABELS.auditor;
+                if (!user) return null;
                 return (
                   <button
                     key={acc.email}
                     type="button"
                     onClick={() => setEmail(acc.email)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors hover:bg-gray-50 ${email === acc.email ? "border-blue-300 bg-blue-50" : "border-gray-200"}`}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-md border text-xs transition-colors hover:bg-gray-50 ${
+                      email === acc.email ? "border-blue-300 bg-blue-50" : "border-gray-200"
+                    }`}
                   >
                     <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
-                        style={{ background: cfg.bg, color: cfg.color }}>
-                        {user?.name.split(" ").map((w) => w[0]).join("").slice(0, 2)}
+                      <div
+                        className="h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0"
+                        style={{ background: cfg.bg, color: cfg.color }}
+                      >
+                        {(user.name || user.user_name || "")
+                          .split(" ")
+                          .map((w) => w[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()}
                       </div>
-                      <span className="text-gray-700">{user?.name}</span>
+                      <span className="text-gray-700">{user.name || user.user_name}</span>
                     </div>
                     <span style={{
                       fontSize: 10, fontWeight: 500, padding: "1px 7px", borderRadius: 20,

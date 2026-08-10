@@ -28,7 +28,7 @@ export const TraceTimelineCard = ({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-sm">
+          <CardTitle className="text-[13px]">
             Trace Timeline
             {isFiltered && (
               <span className="ml-2 text-xs font-normal text-muted-foreground">— Filtered view</span>
@@ -50,23 +50,23 @@ export const TraceTimelineCard = ({
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && <p className="text-[13px] text-destructive">{error}</p>}
 
         {loading && (
-          <div className="rounded-md border px-4 py-8 text-sm text-center text-muted-foreground">
+          <div className="rounded-md border px-4 py-8 text-[13px] text-center text-muted-foreground">
             Loading trace timeline...
           </div>
         )}
 
         {!loading && events.length === 0 && isFiltered && (
-          <div className="rounded-md border bg-muted/20 px-4 py-8 text-sm text-center text-muted-foreground space-y-3">
+          <div className="rounded-md border bg-muted/20 px-4 py-8 text-[13px] text-center text-muted-foreground space-y-3">
             <p>No trace events found for this filter.</p>
             <Button size="sm" variant="outline" onClick={onClearFilter}>Clear Filter</Button>
           </div>
         )}
 
         {!loading && events.length === 0 && !isFiltered && (
-          <div className="rounded-md border bg-muted/20 px-4 py-8 text-sm text-center text-muted-foreground">
+          <div className="rounded-md border bg-muted/20 px-4 py-8 text-[13px] text-center text-muted-foreground">
             No trace events found for this tenant and warehouse scope.
           </div>
         )}
@@ -86,7 +86,7 @@ export const TraceTimelineCard = ({
         )}
 
         {/* Pagination */}
-        <div className="flex items-center justify-between gap-2 text-sm pt-1">
+        <div className="flex items-center justify-between gap-2 text-[13px] pt-1">
           <div className="text-xs text-muted-foreground">
             {total} event{total === 1 ? "" : "s"} · Page {page} of {totalPages}
           </div>

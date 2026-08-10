@@ -126,8 +126,6 @@ const rolePermissions = {
   ],
   storeoperator: [
     "returns.view",
-    "returns.create",
-    "returns.create_rma",
     "rma.view",
     "putaway.view",
     "putaway.view_history",

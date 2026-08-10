@@ -1,21 +1,28 @@
 const roleAliases = {
+  "super admin": "superadmin",
+  "hq admin": "hqadmin",
+  "wh manager": "storemanager",
+  whmanager: "storemanager",
+  "warehouse manager": "storemanager",
+  "store manager": "storemanager",
+  "store operator": "storeoperator",
+  manager: "storemanager",
   warehousemanager: "storemanager",
   storekeeper: "storeoperator",
 };
 
 const transitionPermissions = {
   asn: {
-    submit: ["superadmin", "hqadmin", "storemanager", "storeoperator"],
-    mark_in_transit: ["superadmin", "hqadmin", "storemanager"],
-    mark_arrived: ["superadmin", "hqadmin", "storemanager"],
-    close: ["superadmin", "hqadmin", "storemanager"],
-    cancel: ["superadmin", "hqadmin", "storemanager"],
+    submit: ["superadmin", "hqadmin"],
+    mark_in_transit: ["storeoperator"],
+    mark_arrived: ["storeoperator"],
+    close: ["storemanager"],
+    cancel: ["superadmin", "hqadmin"],
   },
   grn: {
-    start_receiving: ["superadmin", "hqadmin", "storemanager", "storeoperator"],
-    complete: ["superadmin", "hqadmin", "storemanager", "storeoperator"],
-    post: ["superadmin", "hqadmin", "storemanager"],
-    cancel: ["superadmin", "hqadmin", "storemanager"],
+    start_receiving: ["storeoperator"],
+    complete: ["storeoperator"],
+    post: ["storemanager"],
   },
 };
 
@@ -108,8 +115,8 @@ const rolePermissions = {
     "outbound.view", "outbound.create", "outbound.release", "outbound.cancel",
     // Trace
     "trace.view",
-    // Master data (no delete, no LOV edit, no users manage)
-    "masterdata.view", "masterdata.edit",
+    // Master data
+    "masterdata.view", "masterdata.edit", "masterdata.delete",
     "lov.view",
     "users.view",
   ],
@@ -155,13 +162,18 @@ const rolePermissions = {
     "inventory.view_summary", "inventory.view_count_plans", "inventory.view_adjustments",
     "picking.view", "packing.view", "shipping.view", "outbound.view",
     "trace.view",
+    "masterdata.view",
+  ],
+  viewer: [
+    "masterdata.view",
   ],
 };
 
-const cancellationRoles = ["superadmin", "hqadmin", "storemanager"];
+const cancellationRoles = ["superadmin", "hqadmin"];
 
 function normalizeRole(roleId) {
-  return roleAliases[String(roleId || "readonly").toLowerCase()] || roleId;
+  const normalized = String(roleId || "readonly").trim().toLowerCase();
+  return roleAliases[normalized] || normalized;
 }
 
 function hasPermission(roleId, permissionId) {
@@ -189,6 +201,10 @@ function canCancelDocument(roleId) {
 // ── Inbound ───────────────────────────────────────────────────────────────────
 function canCreateInbound(roleId) { return hasPermission(roleId, "inbound.create"); }
 function canCancelInbound(roleId) { return hasPermission(roleId, "inbound.cancel"); }
+function canCreateAsn(roleId) {
+  return ["superadmin", "hqadmin"].includes(normalizeRole(roleId));
+}
+function canCreateGrn(_roleId) { return false; }
 
 // ── Returns ───────────────────────────────────────────────────────────────────
 function canViewReturns(roleId) { return hasPermission(roleId, "returns.view"); }
@@ -240,9 +256,13 @@ function canCancelShipment(roleId) { return hasPermission(roleId, "shipping.canc
 
 // ── Outbound ──────────────────────────────────────────────────────────────────
 function canViewOutbound(roleId) { return hasPermission(roleId, "outbound.view"); }
-function canCreateOutbound(roleId) { return hasPermission(roleId, "outbound.create"); }
+function canCreateOutbound(roleId) {
+  return ["superadmin", "hqadmin", "admin"].includes(normalizeRole(roleId));
+}
 function canReleaseOutbound(roleId) { return hasPermission(roleId, "outbound.release"); }
-function canCancelOutbound(roleId) { return hasPermission(roleId, "outbound.cancel"); }
+function canCancelOutbound(roleId) {
+  return ["superadmin", "hqadmin", "admin"].includes(normalizeRole(roleId));
+}
 
 // ── Trace ─────────────────────────────────────────────────────────────────────
 function canViewTrace(roleId) { return hasPermission(roleId, "trace.view"); }
@@ -274,7 +294,7 @@ export {
   canTransition,
   canCancelDocument,
   // Inbound
-  canCreateInbound, canCancelInbound,
+  canCreateInbound, canCancelInbound, canCreateAsn, canCreateGrn,
   // Returns
   canViewReturns, canCreateReturn, canCancelReturn,
   canCreateRma, canViewRma, canCancelRma,

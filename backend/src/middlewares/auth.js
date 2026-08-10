@@ -26,6 +26,10 @@ function resolveTenantFromClaims(payload) {
   return payload.tenant_id || payload.tenantId || payload.org_id || payload.orgId || null;
 }
 
+function resolveWarehouseFromClaims(payload) {
+  return payload.warehouse_id || payload.warehouseId || null;
+}
+
 function resolveRolesFromClaims(payload) {
   if (Array.isArray(payload.roles)) {
     return payload.roles.map((item) => String(item).toLowerCase());
@@ -75,18 +79,20 @@ function getJwks() {
 function applyStubContext(req) {
   const tenantId = typeof req.headers["x-tenant-id"] === "string" ? req.headers["x-tenant-id"].trim() : "";
   const userId = typeof req.headers["x-user-id"] === "string" ? req.headers["x-user-id"].trim() : "";
+  const warehouseId = typeof req.headers["x-warehouse-id"] === "string" ? req.headers["x-warehouse-id"].trim() : "";
 
   if (!tenantId || !userId) {
     return false;
   }
 
-  const roles = parseRoles(req.headers["x-roles"]);
+  const roles = parseRoles(req.headers["x-roles"] || req.headers["x-role-id"]);
   const permissions = parsePermissions(req.headers["x-permissions"]);
 
   req.context = {
     ...req.context,
     userId,
     tenantId,
+    warehouseId: warehouseId || null,
     roles,
     permissions,
   };
@@ -95,34 +101,12 @@ function applyStubContext(req) {
   req.tenant_id = tenantId;
   req.user_id = userId;
   req.role_id = roles[0] || "superadmin";
+  req.warehouse_id = warehouseId || null;
 
   return true;
 }
 
 async function verifyClerkJwt(req, _res, next) {
-
-  // DEVELOPMENT BYPASS
-  if (process.env.NODE_ENV === "development") {
-    const tenantId = req.headers["x-tenant-id"] || "TNT000001";
-    const userId = req.headers["x-user-id"] || "USR000001";
-    const roles = parseRoles(req.headers["x-roles"] || "superadmin");
-
-    req.context = {
-      ...req.context,
-      userId,
-      tenantId,
-      roles,
-      permissions: ["*"]
-    };
-
-    // Flat fields untuk routes lama (returns.js, rma.js dll)
-    req.tenant_id = tenantId;
-    req.user_id = userId;
-    req.role_id = roles[0] || "superadmin";
-
-    return next();
-  }
-
   try {
     if (isNonProduction() && applyStubContext(req)) {
       return next();
@@ -150,6 +134,7 @@ async function verifyClerkJwt(req, _res, next) {
 
     const userId = payload.sub ? String(payload.sub) : "";
     const tenantId = resolveTenantFromClaims(payload);
+    const warehouseId = resolveWarehouseFromClaims(payload);
 
     if (!userId || !tenantId) {
       throw new ApiError(401, "INVALID_TOKEN", "Token must include user and tenant context");
@@ -159,6 +144,7 @@ async function verifyClerkJwt(req, _res, next) {
       ...req.context,
       userId,
       tenantId: String(tenantId),
+      warehouseId: warehouseId ? String(warehouseId) : null,
       roles: resolveRolesFromClaims(payload),
       permissions: resolvePermissionsFromClaims(payload),
     };
@@ -167,6 +153,7 @@ async function verifyClerkJwt(req, _res, next) {
     req.tenant_id = String(tenantId);
     req.user_id = userId;
     req.role_id = resolveRolesFromClaims(payload)[0] || "";
+    req.warehouse_id = warehouseId ? String(warehouseId) : null;
 
     return next();
   } catch (error) {
@@ -176,6 +163,18 @@ async function verifyClerkJwt(req, _res, next) {
         : new ApiError(401, "INVALID_TOKEN", "Unable to verify Clerk JWT")
     );
   }
+}
+
+function requireAuthenticatedTenant(req, _res, next) {
+  if (!req.context?.userId) {
+    return next(new ApiError(401, "UNAUTHORIZED", "Authentication is required"));
+  }
+
+  if (!req.context?.tenantId) {
+    return next(new ApiError(403, "TENANT_CONTEXT_REQUIRED", "Tenant context is required"));
+  }
+
+  return next();
 }
 
 function requireRole(allowedRoles = []) {
@@ -220,4 +219,4 @@ function requirePermission(requiredPermissions = []) {
   };
 }
 
-export { verifyClerkJwt, requireRole, requirePermission };
+export { verifyClerkJwt, requireAuthenticatedTenant, requireRole, requirePermission };

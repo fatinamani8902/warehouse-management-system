@@ -295,7 +295,7 @@ router.post("/grn", (req, res) => {
     asnId: asnId || null,
     supplierId: supplierId || null,
     receivedDate: req.body?.received_date,
-    notes: req.body?.notes,
+    notes: req.body.notes || null,
     lines: req.body?.lines,
   });
 

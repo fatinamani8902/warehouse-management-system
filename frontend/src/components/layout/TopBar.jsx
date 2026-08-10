@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatDateTime } from "@/utils/dateTimeFormatter";
 import { tenants } from "@/data/mockData";
 import { Search, Bell, ChevronDown, LogOut, Shield, Building2, Warehouse } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,11 +13,14 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 const ROLE_CONFIG = {
-  superadmin:       { label: "Super Admin", bg: "#FEE2E2", color: "#991B1B" },
-  hqadmin:          { label: "HQ Admin",    bg: "#EDE9FE", color: "#5B21B6" },
-  warehousemanager: { label: "WH Manager",  bg: "#DBEAFE", color: "#1E40AF" },
-  storekeeper:      { label: "Store Keeper",bg: "#D1FAE5", color: "#065F46" },
-  auditor:          { label: "Auditor",     bg: "#FEF9C3", color: "#854D0E" },
+  superadmin:       { label: "Super Admin",    bg: "#FEE2E2", color: "#991B1B" },
+  hqadmin:          { label: "HQ Admin",       bg: "#EDE9FE", color: "#5B21B6" },
+  warehousemanager: { label: "WH Manager",     bg: "#DBEAFE", color: "#1E40AF" },
+  storemanager:     { label: "Store Manager",  bg: "#DBEAFE", color: "#1E40AF" },
+  storeoperator:    { label: "Store Operator", bg: "#D1FAE5", color: "#065F46" },
+  storekeeper:      { label: "Store Keeper",   bg: "#D1FAE5", color: "#065F46" },
+  auditor:          { label: "Auditor",        bg: "#FEF9C3", color: "#854D0E" },
+  readonly:         { label: "Read Only",      bg: "#F3F4F6", color: "#374151" },
 };
 
 function getInitials(name = "") {
@@ -115,7 +119,7 @@ export const TopBar = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
-              className="pl-9 h-9 text-sm bg-muted/30 border-border/60 focus:bg-background"
+              className="pl-9 h-9 text-[13px] bg-muted/30 border-border/60 focus:bg-background"
             />
           </div>
 
@@ -155,7 +159,7 @@ export const TopBar = () => {
             <DropdownMenuContent align="end" className="bg-popover z-50 w-52">
               {/* User info header */}
               <div className="px-3 py-2 border-b border-border">
-                <p className="text-sm font-medium">{auth.currentUser?.name}</p>
+                <p className="text-[13px] font-medium">{auth.currentUser?.name}</p>
                 <p className="text-xs text-muted-foreground">{auth.currentUser?.email}</p>
               </div>
               <DropdownMenuItem onClick={() => setShowSession(true)} className="cursor-pointer mt-1">
@@ -174,7 +178,7 @@ export const TopBar = () => {
       <Dialog open={showSession} onOpenChange={setShowSession}>
         <DialogContent>
           <DialogHeader><DialogTitle>Session Information</DialogTitle></DialogHeader>
-          <div className="space-y-3 text-sm">
+          <div className="space-y-3 text-[13px]">
             <div className="grid grid-cols-2 gap-2">
               <span className="text-muted-foreground">User:</span><span>{auth.currentUser?.name}</span>
               <span className="text-muted-foreground">Email:</span><span>{auth.currentUser?.email}</span>
@@ -187,10 +191,10 @@ export const TopBar = () => {
                 <Badge variant="outline">{auth.currentUser?.role}</Badge>
               )}
               <span className="text-muted-foreground">Tenant:</span><span className="font-mono text-xs">{auth.currentTenantId}</span>
-              <span className="text-muted-foreground">Warehouse:</span><span className="font-mono text-xs">{auth.currentWarehouseId || "—"}</span>
+              <span className="text-muted-foreground">Warehouse:</span><span className="text-xs">{auth.getWarehouseName() || auth.currentWarehouseId || "-"}</span>
               <span className="text-muted-foreground">Token Expiry:</span>
               <span className="font-mono text-xs">
-                {auth.tokenExpiry ? new Date(auth.tokenExpiry).toLocaleTimeString() : "—"}
+                {formatDateTime(auth.tokenExpiry)}
               </span>
             </div>
           </div>
@@ -201,10 +205,10 @@ export const TopBar = () => {
       <Dialog open={!!showTenantConfirm} onOpenChange={() => setShowTenantConfirm(null)}>
         <DialogContent>
           <DialogHeader><DialogTitle>Switch Tenant?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[13px] text-muted-foreground">
             Switching tenants will clear your current warehouse selection. Any unsaved changes will be lost.
           </p>
-          <p className="text-sm font-medium">
+          <p className="text-[13px] font-medium">
             Switch to: {tenants.find((t) => t.id === showTenantConfirm)?.name}
           </p>
           <DialogFooter>

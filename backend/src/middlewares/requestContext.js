@@ -10,6 +10,7 @@ function requestContext(req, res, next) {
   req.context = {
     userId: null,
     tenantId: null,
+    warehouseId: null,
     roles: [],
     permissions: [],
   };

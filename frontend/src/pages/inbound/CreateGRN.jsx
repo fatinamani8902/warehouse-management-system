@@ -1,18 +1,45 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { GlossaryRegistry, GlossaryTerm } from "@/components/shared/GlossaryTooltip";
 import SupplierSelect from "@/components/selects/SupplierSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createGrn } from "@/services/api";
+import { createGrn, fetchEligibleGrnAsns } from "@/services/api";
 
-export default function CreateGRN({ session, asns, onCreated, onCancel }) {
+export default function CreateGRN({ session, onCreated, onCancel }) {
   const [asnId, setAsnId] = useState("");
+  const [asns, setAsns] = useState([]);
+  const [loadingAsns, setLoadingAsns] = useState(true);
   const [supplierId, setSupplierId] = useState("");
   const [receivedDate, setReceivedDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingAsns(true);
+    fetchEligibleGrnAsns(session)
+      .then((rows) => {
+        if (active) setAsns(rows);
+      })
+      .catch((error) => {
+        if (active) {
+          setAsns([]);
+          setErrors((current) => ({
+            ...current,
+            form: error.message || "Unable to load eligible ASNs",
+          }));
+        }
+      })
+      .finally(() => {
+        if (active) setLoadingAsns(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   const asnLookup = useMemo(() => {
     const map = new Map();
@@ -35,7 +62,7 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
     }
   }, [asnId, asnLookup]);
 
-  const supplierLocked = Boolean(asnId);
+  const supplierLocked = true;
 
   const validate = () => {
     const nextErrors = {};
@@ -43,8 +70,8 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
       nextErrors.received_date = "Receiving date is required";
     }
 
-    if (!asnId && !supplierId) {
-      nextErrors.supplier_id = "Supplier is required when ASN is not selected";
+    if (!asnId) {
+      nextErrors.asn_id = "Select an arrived ASN";
     }
 
     setErrors(nextErrors);
@@ -78,16 +105,24 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
   };
 
   return (
+    <GlossaryRegistry>
     <form className="space-y-4" onSubmit={handleSubmit}>
       <div className="space-y-1.5">
-        <Label htmlFor="create-grn-asn">ASN Reference</Label>
+        <Label htmlFor="create-grn-asn"><GlossaryTerm term="ASN" /> Reference</Label>
         <select
           id="create-grn-asn"
-          className="w-full border rounded px-2 py-1 h-9 bg-white"
+          className="w-full border rounded px-2 py-1 h-10 bg-white"
           value={asnId}
-          onChange={(event) => setAsnId(event.target.value)}
+          onChange={(event) => {
+            setAsnId(event.target.value);
+            setErrors((current) => {
+              const { asn_id, ...rest } = current;
+              return rest;
+            });
+          }}
+          disabled={loadingAsns || asns.length === 0}
         >
-          <option value="">No ASN (Direct Receipt)</option>
+          <option value="">{loadingAsns ? "Loading arrived ASNs..." : "Select arrived ASN"}</option>
           {(asns || [])
   .filter((asn) => asn.asn_id)
   .map((asn) => (
@@ -96,6 +131,10 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
             </option>
           ))}
         </select>
+        {!loadingAsns && asns.length === 0 && (
+          <p className="text-[13px] text-muted-foreground">No arrived ASN available for GRN creation.</p>
+        )}
+        {errors.asn_id && <p className="text-xs text-destructive">{errors.asn_id}</p>}
       </div>
 
       <div className="space-y-1.5">
@@ -109,7 +148,7 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
           required={!supplierLocked}
           hasError={Boolean(errors.supplier_id)}
         />
-        {supplierLocked && (
+        {asnId && (
           <p className="text-xs text-muted-foreground">Supplier is derived from the selected ASN.</p>
         )}
         {errors.supplier_id && <p className="text-xs text-destructive">{errors.supplier_id}</p>}
@@ -137,10 +176,11 @@ export default function CreateGRN({ session, asns, onCreated, onCancel }) {
         <Button type="button" variant="outline" onClick={onCancel} disabled={submitting}>
           Back
         </Button>
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || loadingAsns || !asnId}>
           {submitting ? "Creating..." : "Create GRN"}
         </Button>
       </div>
     </form>
+    </GlossaryRegistry>
   );
 }

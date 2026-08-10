@@ -6,15 +6,16 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import v1Routes from "./routes/v1/index.js";
 import loginRoutes from "./routes/v1/loginRoutes.js";   // ← PUBLIC, no JWT
+import returnsPostgresRoutes from "./routes/returnsPostgresRoutes.js";
 import { requestContext } from "./middlewares/requestContext.js";
 import { requestLogger } from "./middlewares/requestLogger.js";
 import { createApiRateLimiter } from "./middlewares/rateLimit.js";
-import { verifyClerkJwt } from "./middlewares/auth.js";
+import { requireAuthenticatedTenant, verifyClerkJwt } from "./middlewares/auth.js";
 import { errorHandler, notFoundHandler } from "./middlewares/errorHandler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
-const rootEnvPath = path.resolve(__dirname, "../.env");
+const rootEnvPath = path.resolve(__dirname, "../../.env");
 dotenv.config({ path: rootEnvPath });
 
 function parseCorsAllowlist() {
@@ -26,6 +27,11 @@ function buildCorsOptions() {
   const allowlist = parseCorsAllowlist();
   return {
     credentials: true,
+    exposedHeaders: [
+      "X-WMS-Build",
+      "X-WMS-Process-Id",
+      "X-WMS-Completion-Service-Version",
+    ],
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin)                    { callback(null, true); return; }
@@ -37,8 +43,15 @@ function buildCorsOptions() {
 
 function createApp() {
   const app = express();
+  app.set('etag', false);
 
   // ── Global middleware ─────────────────────────────────────────────────────
+  app.use((_req, res, next) => {
+    res.setHeader("X-WMS-Build", "putaway-completion-assigned-column");
+    res.setHeader("X-WMS-Process-Id", String(process.pid));
+    res.setHeader("X-WMS-Completion-Service-Version", "assigned-to-user-id-v2");
+    next();
+  });
   app.use(requestContext);
   app.use(helmet());
   app.use(cors(buildCorsOptions()));
@@ -68,9 +81,13 @@ function createApp() {
 
   // ── JWT middleware applies to everything below ────────────────────────────
   app.use(verifyClerkJwt);
+  app.use(requireAuthenticatedTenant);
 
   // ── Protected routes ──────────────────────────────────────────────────────
+  app.use("/api/v1/returns", returnsPostgresRoutes);
+  app.use("/api/returns", returnsPostgresRoutes);
   app.use("/api/v1", v1Routes);
+  app.use("/api", v1Routes);
 
   // ── Error handlers ────────────────────────────────────────────────────────
   app.use(notFoundHandler);
